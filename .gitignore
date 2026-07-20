@@ -3,7 +3,7 @@ __pycache__/
 *.pyo
 .env
 venv/
-.env.example
+!.env.example
 node_modules/
 desktop/node_modules/
 desktop/package-lock.json

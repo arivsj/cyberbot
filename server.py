@@ -4,6 +4,10 @@ import time
 import signal
 import subprocess
 import threading
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import httpx
 from flask import Flask, jsonify, request
 from flask_cors import CORS
