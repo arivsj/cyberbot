@@ -24,6 +24,7 @@ import youtube
 import trilha_rede
 import log
 import security
+import cleanup
 import ollama_utils
 db.init()
 
@@ -77,6 +78,7 @@ MAIN_MENU_BUTTONS = [
     [InlineKeyboardButton("🧠 Trilha Rede", callback_data="tr_main")],
     [InlineKeyboardButton("📱 PC Apps", callback_data="pc_main")],
     [InlineKeyboardButton("🛡️ Security", callback_data="sec_main")],
+    [InlineKeyboardButton("🧹 Limpeza", callback_data="cl_main")],
     [InlineKeyboardButton("🔄 Trocar modelo", callback_data="menu_model"),
      InlineKeyboardButton("🧹 Limpar histórico", callback_data="menu_clear")],
 ]
@@ -1147,6 +1149,88 @@ async def model_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── End Model callback ─────────────────────────────────
 
+# ─── Cleanup ──────────────────────────────────────────────
+
+async def cleanup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not _check_whitelist(update):
+        await query.answer("❌ Acesso negado", show_alert=True)
+        return
+    _log_update(update, "callback", query.data)
+    await query.answer()
+    data = query.data.split("_", 2)
+    cb = data[1]
+
+    if cb == "main":
+        buttons = [
+            [InlineKeyboardButton("🧹 Limpeza segura", callback_data="cl_safe")],
+            [InlineKeyboardButton("⚠️ Limpeza completa", callback_data="cl_all")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="menu_back")],
+        ]
+        await query.edit_message_text(
+            "🧹 *Limpeza do Sistema*\n\n"
+            "Escolha o tipo de limpeza:\n\n"
+            "✅ *Segura* — mantém servidor rodando\n"
+            "   Cache apt, logs, cache do usuário,\n"
+            "   lixeira, pip, npm, snap, kernels antigos\n\n"
+            "⚠️ *Completa* — tudo acima + /tmp e cache RAM\n"
+            "   Pode afetar processos temporários\n\n"
+            "📌 *Comandos individuais* disponíveis abaixo:",
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="Markdown",
+        )
+        return
+
+    if cb == "safe":
+        await query.edit_message_text("🧹 *Limpando sistema (modo seguro)...*\n⏳ Aguarde...", parse_mode="Markdown")
+        results = cleanup.run_safe()
+        lines = ["✅ *Limpeza segura concluída!*\n"]
+        for r in results:
+            icon = "✅" if r["ok"] else "❌"
+            task_name = next((t["name"] for t in cleanup.TASKS if t["id"] == r["id"]), r["id"])
+            lines.append(f"{icon} *{task_name}*")
+            if r["stdout"]:
+                lines.append(f"   `{r['stdout'][:100]}`")
+        buttons = [[InlineKeyboardButton("🔙 Limpeza", callback_data="cl_main")]]
+        await query.edit_message_text(
+            "\n".join(lines)[:4000],
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="Markdown",
+        )
+        return
+
+    if cb == "all":
+        await query.edit_message_text("⚠️ *Limpando sistema (completo)...*\n⏳ Aguarde...", parse_mode="Markdown")
+        results = cleanup.run_all()
+        lines = ["⚠️ *Limpeza completa concluída!*\n"]
+        for r in results:
+            icon = "✅" if r["ok"] else "❌"
+            task_name = next((t["name"] for t in cleanup.TASKS if t["id"] == r["id"]), r["id"])
+            lines.append(f"{icon} *{task_name}*")
+        buttons = [[InlineKeyboardButton("🔙 Limpeza", callback_data="cl_main")]]
+        await query.edit_message_text(
+            "\n".join(lines)[:4000],
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="Markdown",
+        )
+        return
+
+    if cb == "task":
+        task_id = data[2]
+        await query.edit_message_text(f"⏳ Executando *{task_id}*...", parse_mode="Markdown")
+        r = cleanup.run_task(task_id)
+        task_name = next((t["name"] for t in cleanup.TASKS if t["id"] == r["id"]), r["id"])
+        icon = "✅" if r["ok"] else "❌"
+        lines = [f"{icon} *{task_name}*"]
+        if r["stdout"]: lines.append(f"```\n{r['stdout'][:300]}\n```")
+        if r["stderr"]: lines.append(f"⚠️ `{r['stderr'][:200]}`")
+        buttons = [[InlineKeyboardButton("🔙 Limpeza", callback_data="cl_main")]]
+        await query.edit_message_text(
+            "\n".join(lines)[:4000],
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="Markdown",
+        )
+
 # ─── PC Apps ────────────────────────────────────────────
 
 PC_APPS = [
@@ -1618,6 +1702,7 @@ def main():
     app.add_handler(CallbackQueryHandler(model_callback, pattern="^mdl_"))
     app.add_handler(CallbackQueryHandler(pc_apps_callback, pattern="^pc_"))
     app.add_handler(CallbackQueryHandler(security_callback, pattern="^sec_"))
+    app.add_handler(CallbackQueryHandler(cleanup_callback, pattern="^cl_"))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

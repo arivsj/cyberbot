@@ -27,8 +27,8 @@
       <a data-module="security">
         <span class="icon">🛡️</span> Security <span id="secBadge" class="nav-badge hidden"></span>
       </a>
-      <a data-module="placeholder1" class="disabled">
-        <span class="icon">■</span> Em breve...
+      <a data-module="cleanup">
+        <span class="icon">🧹</span> Limpeza
       </a>
     </nav>
     <div id="sysmonCard" class="sysmon-card">
@@ -202,6 +202,21 @@
         </div>
       </div>
       <div id="secResults" class="sec-grid"></div>
+    </div>
+
+    <div class="module hidden" id="module-cleanup">
+      <h1>🧹 Limpeza do Sistema</h1>
+      <div class="cards">
+        <div class="card wide">
+          <div class="label">Ações</div>
+          <div class="sec-controls" style="margin-bottom:0">
+            <button class="btn-start" id="clSafe">✅ Limpeza Segura</button>
+            <button class="btn-start btn-stop" id="clAll">⚠️ Limpeza Completa</button>
+            <span id="clStatus" class="sec-status"></span>
+          </div>
+        </div>
+      </div>
+      <div id="clTasks" class="sec-grid"></div>
     </div>
   </main>
 

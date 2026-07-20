@@ -1114,6 +1114,98 @@ setInterval(loadDashboard, 10000);
 setInterval(loadFinancas, 10000);
 setInterval(updateSecBadge, 30000);
 
+// ─── Cleanup ──────────────────────────────────────────
+
+function setClStatus(text, cls) {
+  const el = document.getElementById("clStatus");
+  el.textContent = text;
+  el.className = "sec-status " + (cls || "");
+}
+
+async function loadCleanup() {
+  setClStatus("⏳ Carregando...", "sending");
+  try {
+    const tasks = await api.get("/api/cleanup/tasks");
+    const grid = document.getElementById("clTasks");
+    grid.innerHTML = tasks.map(t => `
+      <div class="sec-card sec-ok" data-task="${t.id}">
+        <div class="sec-card-header">
+          <span class="sec-icon">🧹</span>
+          <span class="sec-title">${t.name}</span>
+          <span class="sec-badge badge-ok">${t.safe ? "seguro" : "⚠️"}</span>
+          <button class="sec-run-btn cl-run-btn" data-task="${t.id}">▶</button>
+        </div>
+        <div class="sec-card-meta"><span class="sec-cmd">${t.needs_sudo ? "🔒 sudo" : "👤 user"}</span></div>
+        <div class="sec-card-desc">${t.desc}</div>
+        <div class="sec-card-body" id="clResult_${t.id}"></div>
+      </div>
+    `).join("");
+
+    grid.querySelectorAll(".cl-run-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.task;
+        const body = document.getElementById(`clResult_${id}`);
+        body.innerHTML = '<span class="sec-empty">⏳ Executando...</span>';
+        try {
+          const res = await api.post("/api/cleanup/run", { task: id });
+          const icon = res.ok ? "✅" : "❌";
+          let html = `<div class="sec-line">${icon} ${res.ok ? "Sucesso" : "Falha"}</div>`;
+          if (res.stdout) html += `<div class="sec-line" style="font-size:11px;color:var(--neon)">${res.stdout.substring(0, 200)}</div>`;
+          if (res.stderr && !res.ok) html += `<div class="sec-line sec-line-alert">${res.stderr.substring(0, 200)}</div>`;
+          body.innerHTML = html;
+        } catch (e) {
+          body.innerHTML = '<div class="sec-line sec-line-alert">❌ Erro ao executar</div>';
+        }
+      });
+    });
+    setClStatus("✅ Pronto", "sent");
+  } catch (_) {
+    setClStatus("❌ Erro", "error");
+  }
+}
+
+document.querySelector('nav a[data-module="cleanup"]')?.addEventListener("click", () => {
+  setTimeout(loadCleanup, 50);
+});
+
+document.getElementById("clSafe")?.addEventListener("click", async () => {
+  setClStatus("⏳ Limpeza segura...", "sending");
+  try {
+    const results = await api.post("/api/cleanup/run", { mode: "safe" });
+    const grid = document.getElementById("clTasks");
+    grid.innerHTML = results.map(r => {
+      const icon = r.ok ? "✅" : "❌";
+      return `<div class="sec-card ${r.ok ? "sec-ok" : "sec-alert"}">
+        <div class="sec-card-header"><span class="sec-icon">${icon}</span><span class="sec-title">${r.id}</span></div>
+        <div class="sec-card-body"><div class="sec-line">${icon} ${r.ok ? "OK" : "Falha"}</div></div>
+      </div>`;
+    }).join("");
+    setClStatus("✅ Limpeza segura concluída!", "sent");
+  } catch (_) {
+    setClStatus("❌ Erro", "error");
+  }
+});
+
+document.getElementById("clAll")?.addEventListener("click", async () => {
+  setClStatus("⏳ Limpeza completa...", "sending");
+  try {
+    const results = await api.post("/api/cleanup/run", { mode: "all" });
+    const grid = document.getElementById("clTasks");
+    grid.innerHTML = results.map(r => {
+      const icon = r.ok ? "✅" : "❌";
+      return `<div class="sec-card ${r.ok ? "sec-ok" : "sec-alert"}">
+        <div class="sec-card-header"><span class="sec-icon">${icon}</span><span class="sec-title">${r.id}</span></div>
+        <div class="sec-card-body"><div class="sec-line">${icon} ${r.ok ? "OK" : "Falha"}</div></div>
+      </div>`;
+    }).join("");
+    setClStatus("⚠️ Limpeza completa concluída!", "sent");
+  } catch (_) {
+    setClStatus("❌ Erro", "error");
+  }
+});
+
+// ─── End Cleanup ──────────────────────────────────────
+
 document.addEventListener("DOMContentLoaded", () => {
   loadDashboard();
   loadFinancas();

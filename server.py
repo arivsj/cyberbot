@@ -553,6 +553,25 @@ def list_models():
         pass
     return jsonify({"models": []})
 
+# ─── Cleanup ──────────────────────────────────────────────
+
+import cleanup
+
+@app.route("/api/cleanup/tasks")
+def cleanup_tasks():
+    return jsonify([{"id": t["id"], "name": t["name"], "desc": t["desc"], "needs_sudo": t["needs_sudo"], "safe": t["safe"]} for t in cleanup.TASKS])
+
+@app.route("/api/cleanup/run", methods=["POST"])
+def cleanup_run():
+    data = request.get_json() or {}
+    task_id = data.get("task")
+    mode = data.get("mode", "single")
+    if task_id:
+        return jsonify(cleanup.run_task(task_id))
+    if mode == "safe":
+        return jsonify(cleanup.run_safe())
+    return jsonify(cleanup.run_all())
+
 # ─── Periodic cache clear ────────────────────────────────
 
 def periodic_cache_clear():
