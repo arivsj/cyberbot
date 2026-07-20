@@ -50,6 +50,36 @@ CHECKS_META = {
         "desc": "Portas escutando em interfaces não-loopback — alerta portas fora do padrão (≠22,80,443,53,5432,3306).",
         "risk": "Serviço não autorizado exposto na rede",
     },
+    "firewall": {
+        "cmd": "ufw status / iptables -L",
+        "desc": "Status do firewall — verifica se UFW está ativo e se há regras de bloqueio configuradas.",
+        "risk": "Firewall desativado — todas as portas expostas",
+    },
+    "fail2ban": {
+        "cmd": "fail2ban-client status",
+        "desc": "Status do Fail2ban — verifica se o serviço está rodando, jails ativos e IPs banidos.",
+        "risk": "Sem proteção contra brute force",
+    },
+    "sudo": {
+        "cmd": "journalctl -u sudo / grep sudo /var/log/auth.log",
+        "desc": "Uso do sudo — monitora comandos sudo recentes e tentativas falhas de autenticação.",
+        "risk": "Uso abusivo de sudo ou tentativa de escalação de privilégio",
+    },
+    "updates": {
+        "cmd": "apt list --upgradable 2>/dev/null | grep -i security",
+        "desc": "Atualizações de segurança pendentes — pacotes com correções disponíveis.",
+        "risk": "Sistema desatualizado com CVEs conhecidas",
+    },
+    "services": {
+        "cmd": "systemctl --failed",
+        "desc": "Serviços systemd com falha — serviços que não iniciaram ou crasharam.",
+        "risk": "Indicador de ataque ou má configuração",
+    },
+    "users": {
+        "cmd": "awk -F: '$3==0' /etc/passwd / awk -F: '$2==\"\"' /etc/shadow",
+        "desc": "Contas de usuário — verifica se há contas sem senha ou com UID 0 fora do root.",
+        "risk": "Backdoor ou escalação de privilégio via conta não protegida",
+    },
 }
 
 def check_connections():
@@ -223,6 +253,108 @@ def check_ports():
     status = "alerta" if alerts else "atencao" if attentions else "ok"
     return {"status": status, "entries": ports, "alerts": alerts, "attentions": attentions, "own_ports": own_ports, "count": len(ports), "meta": CHECKS_META["ports"]}
 
+def check_firewall():
+    ufw, _, _ = _run("ufw status 2>/dev/null")
+    alerts = []
+    if "Status: active" in ufw:
+        return {"status": "ok", "detail": "UFW ativo", "alerts": [], "meta": CHECKS_META["firewall"]}
+    if ufw and "Status: inactive" in ufw:
+        alerts.append("UFW está inativo. Ative com: sudo ufw enable")
+        return {"status": "alerta", "detail": "UFW inativo", "alerts": alerts, "meta": CHECKS_META["firewall"]}
+    out, _, _ = _run("iptables -L -n 2>/dev/null | head -5")
+    if "Chain INPUT" in out:
+        return {"status": "ok", "detail": "iptables presente", "alerts": [], "meta": CHECKS_META["firewall"]}
+    alerts.append("Nenhum firewall detectado (UFW ou iptables)")
+    return {"status": "alerta", "detail": "sem firewall", "alerts": alerts, "meta": CHECKS_META["firewall"]}
+
+def check_fail2ban():
+    out, _, code = _run("fail2ban-client status 2>/dev/null")
+    alerts = []
+    if code != 0 or not out:
+        alerts.append("Fail2ban não está rodando ou não instalado")
+        return {"status": "alerta", "jails": [], "banned": 0, "alerts": alerts, "meta": CHECKS_META["fail2ban"]}
+    jails = []
+    banned = 0
+    for line in out.split("\n"):
+        if "Jail list" in line:
+            jails = [j.strip() for j in line.split(":")[-1].strip().split(",") if j.strip()]
+        if "Banned" in line:
+            try:
+                banned = int(line.split(":")[-1].strip())
+            except:
+                pass
+    if not jails:
+        alerts.append("Fail2ban rodando mas sem jails ativos")
+    return {"status": "atencao" if not jails else "ok", "jails": jails, "banned": banned, "alerts": alerts, "meta": CHECKS_META["fail2ban"]}
+
+def check_sudo():
+    out, _, _ = _run("journalctl -u sudo -n 20 --no-pager 2>/dev/null | tail -15")
+    alerts = []
+    entries = []
+    if not out:
+        out, _, _ = _run("grep -a 'sudo' /var/log/auth.log 2>/dev/null | tail -15")
+    if not out:
+        return {"status": "ok", "entries": [], "count": 0, "alerts": [], "meta": CHECKS_META["sudo"]}
+    for line in out.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        entries.append(line)
+        if "FAILED" in line.upper() or "incorrect" in line.lower() or "authentication failure" in line.lower():
+            alerts.append(f"Tentativa falha de sudo: {line[:120]}")
+    return {"status": "alerta" if alerts else "ok", "entries": entries, "count": len(entries), "alerts": alerts[:5], "meta": CHECKS_META["sudo"]}
+
+def check_updates():
+    out, _, code = _run("apt list --upgradable 2>/dev/null | grep -i security | head -20")
+    alerts = []
+    security_pkgs = []
+    if not out:
+        out2, _, _ = _run("apt list --upgradable 2>/dev/null | tail -n +2 | head -30")
+        if not out2:
+            return {"status": "ok", "packages": [], "count": 0, "alerts": [], "meta": CHECKS_META["updates"]}
+        return {"status": "ok", "packages": [], "count": 0, "alerts": [], "detail": "Atualizações disponíveis (não críticas)", "meta": CHECKS_META["updates"]}
+    for line in out.split("\n"):
+        line = line.strip()
+        if line:
+            security_pkgs.append(line)
+    if security_pkgs:
+        alerts.append(f"{len(security_pkgs)} pacote(s) de segurança pendente(s)")
+        for p in security_pkgs[:5]:
+            alerts.append(f"  {p}")
+    return {"status": "alerta" if security_pkgs else "ok", "packages": security_pkgs, "count": len(security_pkgs), "alerts": alerts, "meta": CHECKS_META["updates"]}
+
+def check_services():
+    out, _, _ = _run("systemctl --failed --no-legend 2>/dev/null | head -15")
+    alerts = []
+    failed = []
+    if not out:
+        return {"status": "ok", "failed": [], "count": 0, "alerts": [], "meta": CHECKS_META["services"]}
+    for line in out.split("\n"):
+        line = line.strip()
+        if line:
+            parts = line.split()
+            if parts:
+                name = parts[0]
+                failed.append(line)
+                alerts.append(f"Serviço com falha: {name}")
+    return {"status": "alerta" if failed else "ok", "failed": failed, "count": len(failed), "alerts": alerts, "meta": CHECKS_META["services"]}
+
+def check_users():
+    uid0, _, _ = _run("awk -F: '($3 == 0) {print}' /etc/passwd 2>/dev/null")
+    empty_pw, _, _ = _run("awk -F: '($2 == \"\") {print}' /etc/shadow 2>/dev/null")
+    alerts = []
+    attentions = []
+    uid0_list = [l.strip() for l in uid0.split("\n") if l.strip()] if uid0 else []
+    empty_list = [l.strip() for l in empty_pw.split("\n") if l.strip()] if empty_pw else []
+    for u in uid0_list:
+        if "root" not in u.split(":")[0]:
+            alerts.append(f"Conta não-root com UID 0: {u.split(':')[0]}")
+    for u in empty_list:
+        alerts.append(f"Conta sem senha: {u.split(':')[0]}")
+    if not uid0_list and not empty_list:
+        attentions.append("Verificar se há contas desativadas ou suspeitas")
+    return {"status": "alerta" if alerts else "ok", "uid0": uid0_list, "empty_password": empty_list, "alerts": alerts, "attentions": attentions if not alerts else [], "meta": CHECKS_META["users"]}
+
 def run_all():
     return {
         "connections": check_connections(),
@@ -231,4 +363,10 @@ def run_all():
         "persistence": check_persistence(),
         "processes": check_processes(),
         "ports": check_ports(),
+        "firewall": check_firewall(),
+        "fail2ban": check_fail2ban(),
+        "sudo": check_sudo(),
+        "updates": check_updates(),
+        "services": check_services(),
+        "users": check_users(),
     }

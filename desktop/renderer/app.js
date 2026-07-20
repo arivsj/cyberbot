@@ -731,10 +731,12 @@ function closeBlocked() {
 
 // ─── Security ─────────────────────────────────────────
 
-const SEC_CHECKS = ["connections", "ssh", "integrity", "persistence", "processes", "ports"];
+const SEC_CHECKS = ["connections", "ssh", "integrity", "persistence", "processes", "ports", "firewall", "fail2ban", "sudo", "updates", "services", "users"];
 const SEC_LABELS = {
   connections: "🌐 Conexões de Saída", ssh: "🔑 Logins SSH", integrity: "📁 Integridade",
   persistence: "⏱ Persistência", processes: "⚙ Processos", ports: "🚪 Portas",
+  firewall: "🔥 Firewall", fail2ban: "🛡 Fail2ban", sudo: "👤 Sudo",
+  updates: "📦 Updates", services: "⚙ Serviços", users: "👥 Usuários",
 };
 
 document.querySelector('nav a[data-module="security"]')?.addEventListener("click", () => {
@@ -864,12 +866,32 @@ function renderCheckBody(name, r) {
       const sus = r.alerts?.some(a => a.includes(p.name));
       html += `<div class="sec-line ${sus ? "sec-line-alert" : ""}">${p.name}: ${p.cpu}% CPU</div>`;
     });
-    } else if (name === "ports") {
-      if (r.alerts?.length) html += r.alerts.map(a => `<div class="sec-line sec-line-alert">🔴 ${a}</div>`).join("");
-      if (r.attentions?.length) html += r.attentions.map(a => `<div class="sec-line" style="color:var(--neon3)">🟡 ${a}</div>`).join("");
-      if (r.own_ports?.length) html += r.own_ports.map(a => `<div class="sec-line" style="color:var(--neon)">🟢 ${a}</div>`).join("");
-      html += `<div class="sec-line">Total: ${r.count} portas abertas</div>`;
-    }
+  } else if (name === "ports") {
+    if (r.alerts?.length) html += r.alerts.map(a => `<div class="sec-line sec-line-alert">🔴 ${a}</div>`).join("");
+    if (r.attentions?.length) html += r.attentions.map(a => `<div class="sec-line" style="color:var(--neon3)">🟡 ${a}</div>`).join("");
+    if (r.own_ports?.length) html += r.own_ports.map(a => `<div class="sec-line" style="color:var(--neon)">🟢 ${a}</div>`).join("");
+    html += `<div class="sec-line">Total: ${r.count} portas abertas</div>`;
+  } else if (name === "firewall") {
+    if (r.alerts?.length) html += r.alerts.map(a => `<div class="sec-line sec-line-alert">🔴 ${a}</div>`).join("");
+    html += `<div class="sec-line">${r.detail || "Status desconhecido"}</div>`;
+  } else if (name === "fail2ban") {
+    if (r.alerts?.length) html += r.alerts.map(a => `<div class="sec-line sec-line-alert">⚠️ ${a}</div>`).join("");
+    html += `<div class="sec-line">Jails: ${r.jails?.join(", ") || "nenhum"} | Banidos: ${r.banned || 0}</div>`;
+  } else if (name === "sudo") {
+    if (r.alerts?.length) html += r.alerts.map(a => `<div class="sec-line sec-line-alert">🔴 ${a}</div>`).join("");
+    html += `<div class="sec-line">Total: ${r.count} entradas</div>`;
+  } else if (name === "updates") {
+    if (r.alerts?.length) html += r.alerts.map(a => `<div class="sec-line sec-line-alert">📦 ${a}</div>`).join("");
+    else html += `<div class="sec-line">🟢 Sistema atualizado</div>`;
+  } else if (name === "services") {
+    if (r.alerts?.length) html += r.alerts.map(a => `<div class="sec-line sec-line-alert">🔴 ${a}</div>`).join("");
+    else html += `<div class="sec-line">🟢 Nenhum serviço com falha</div>`;
+  } else if (name === "users") {
+    if (r.alerts?.length) html += r.alerts.map(a => `<div class="sec-line sec-line-alert">🔴 ${a}</div>`).join("");
+    if (r.attentions?.length) html += r.attentions.map(a => `<div class="sec-line" style="color:var(--neon3)">🟡 ${a}</div>`).join("");
+    if (!r.alerts?.length && !r.attentions?.length) html += `<div class="sec-line">🟢 Contas normais</div>`;
+    if (r.uid0?.length) html += `<div class="sec-line">UID 0: ${r.uid0.join(", ")}</div>`;
+  }
   return html || '<span class="sec-empty">Nada encontrado</span>';
 }
 

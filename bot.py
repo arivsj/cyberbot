@@ -1294,7 +1294,7 @@ async def pc_apps_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── Security ──────────────────────────────────────────
 
-SEC_CHECKS_BOT = ["connections", "ssh", "integrity", "persistence", "processes", "ports"]
+SEC_CHECKS_BOT = ["connections", "ssh", "integrity", "persistence", "processes", "ports", "firewall", "fail2ban", "sudo", "updates", "services", "users"]
 
 async def security_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1361,7 +1361,7 @@ async def security_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🛡️ *Executando varredura...*\n⏳ Aguarde...", parse_mode="Markdown")
         results = security.run_all()
         lines = [f"🛡️ *SEGURANÇA DO SERVIDOR*"]
-        icons = {"connections": "🌐", "ssh": "🔑", "integrity": "📁", "persistence": "⏱", "processes": "⚙", "ports": "🚪"}
+        icons = {"connections": "🌐", "ssh": "🔑", "integrity": "📁", "persistence": "⏱", "processes": "⚙", "ports": "🚪", "firewall": "🔥", "fail2ban": "🛡", "sudo": "👤", "updates": "📦", "services": "⚙", "users": "👥"}
         total_risk = 0
         for name in SEC_CHECKS_BOT:
             r = results.get(name, {})
@@ -1453,7 +1453,7 @@ async def security_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "",
             f"🛡️ *RESUMO*",
         ]
-        icons = {"connections": "🌐", "ssh": "🔑", "integrity": "📁", "persistence": "⏱", "processes": "⚙", "ports": "🚪"}
+        icons = {"connections": "🌐", "ssh": "🔑", "integrity": "📁", "persistence": "⏱", "processes": "⚙", "ports": "🚪", "firewall": "🔥", "fail2ban": "🛡", "sudo": "👤", "updates": "📦", "services": "⚙", "users": "👥"}
         for name in SEC_CHECKS_BOT:
             r = results.get(name, {})
             st = r.get("status", "erro")

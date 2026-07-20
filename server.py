@@ -421,8 +421,8 @@ def security_run():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-SEC_CHECKS_LIST = ["connections", "ssh", "integrity", "persistence", "processes", "ports"]
-SEC_LABELS = {"connections": "🌐 Conexões", "ssh": "🔑 SSH", "integrity": "📁 Integridade", "persistence": "⏱ Persistência", "processes": "⚙ Processos", "ports": "🚪 Portas"}
+SEC_CHECKS_LIST = ["connections", "ssh", "integrity", "persistence", "processes", "ports", "firewall", "fail2ban", "sudo", "updates", "services", "users"]
+SEC_LABELS = {"connections": "🌐 Conexões", "ssh": "🔑 SSH", "integrity": "📁 Integridade", "persistence": "⏱ Persistência", "processes": "⚙ Processos", "ports": "🚪 Portas", "firewall": "🔥 Firewall", "fail2ban": "🛡 Fail2ban", "sudo": "👤 Sudo", "updates": "📦 Updates", "services": "⚙ Serviços", "users": "👥 Usuários"}
 
 @app.route("/api/security/report")
 def security_report():
