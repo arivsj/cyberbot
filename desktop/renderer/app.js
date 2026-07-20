@@ -739,6 +739,28 @@ const SEC_LABELS = {
   updates: "📦 Updates", services: "⚙ Serviços", users: "👥 Usuários",
 };
 
+async function updateSecBadge() {
+  const badge = document.getElementById("secBadge");
+  if (!badge) return;
+  try {
+    const all = await api.get("/api/security/run");
+    if (all && all.error) { badge.classList.add("hidden"); return; }
+    let total = 0;
+    for (const name of SEC_CHECKS) {
+      const r = all[name];
+      if (r?.status === "alerta") total += r.alerts?.length || 1;
+    }
+    if (total > 0) {
+      badge.textContent = total > 99 ? "99+" : total;
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  } catch (_) {
+    badge.classList.add("hidden");
+  }
+}
+
 document.querySelector('nav a[data-module="security"]')?.addEventListener("click", () => {
   setTimeout(loadSecurity, 50);
 });
@@ -1090,10 +1112,12 @@ setInterval(loadSysmon, 600000);
 setInterval(loadStatus, 5000);
 setInterval(loadDashboard, 10000);
 setInterval(loadFinancas, 10000);
+setInterval(updateSecBadge, 30000);
 
 document.addEventListener("DOMContentLoaded", () => {
   loadDashboard();
   loadFinancas();
   loadSysmon();
+  updateSecBadge();
   document.getElementById("statusCache").textContent = "A cada 30 min (automático)";
 });

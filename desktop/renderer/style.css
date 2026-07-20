@@ -575,3 +575,23 @@ tr:hover td { background: var(--surface2); }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+
+/* Nav badge */
+.nav-badge {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  background: var(--danger);
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: auto;
+  line-height: 14px;
+  min-width: 14px;
+  text-align: center;
+  box-shadow: 0 0 8px var(--danger);
+  animation: pulse-badge 2s infinite;
+}
+@keyframes pulse-badge {
+  0%, 100% { box-shadow: 0 0 4px var(--danger); }
+  50% { box-shadow: 0 0 14px var(--danger); }
+}
