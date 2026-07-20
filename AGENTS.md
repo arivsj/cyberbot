@@ -100,6 +100,13 @@ cd desktop && npm start
 | `/sysmon` | Monitor do sistema |
 | `/cancel` | Cancela operação atual |
 
+## Git — Regras Importantes
+
+- **NUNCA** fazer `git add` ou `git commit` sem **perguntar antes**
+- Sempre mostrar os arquivos que serão incluídos e pedir confirmação
+- Commits com mensagens descritivas em português
+- Forçar push só com autorização explícita
+
 ## Convenções de Código
 
 - **Python**: sem comentários supérfluos, snake_case, type hints quando aplicável

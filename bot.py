@@ -5,6 +5,9 @@ import time
 import uuid
 import asyncio
 import shutil
+import difflib
+from datetime import datetime
+from collections import Counter
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -138,6 +141,121 @@ async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
 
+async def financa_insights(query, context):
+    model = context.user_data.get("model", MODEL)
+    hoje = datetime.now().strftime("%Y-%m")
+    meses = db.meses_disponiveis()
+    mes_atual = hoje if hoje in meses else (meses[0] if meses else None)
+
+    await query.edit_message_text("🤖 *Analisando suas finanças...*", parse_mode="Markdown")
+
+    def _grupo(items, chave_nome="categoria"):
+        grupos = []
+        usados = set()
+        for i, item in enumerate(items):
+            if i in usados:
+                continue
+            nome = item[chave_nome]
+            similares = [j for j in range(i, len(items)) if j not in usados and difflib.SequenceMatcher(None, nome, items[j][chave_nome]).ratio() >= 0.8]
+            soma_total = sum(items[j]["total"] for j in similares)
+            soma_qtde = sum(items[j]["qtde"] for j in similares)
+            usados.update(similares)
+            grupos.append({chave_nome: nome, "total": soma_total, "qtde": soma_qtde})
+        return sorted(grupos, key=lambda x: -x["total"])[:5]
+
+    r = db.resumo_mes(mes=mes_atual)
+    cats_raw = db.gastos_por_categoria(mes=mes_atual)
+    contas_raw = db.gastos_por_conta(mes=mes_atual)
+    cats = _grupo(cats_raw, "categoria") if cats_raw else []
+    contas = _grupo(contas_raw, "conta") if contas_raw else []
+
+    dados = (
+        f"MÊS: {mes_atual}\n"
+        f"GASTO TOTAL: R$ {r['total_gasto']:.2f}\n"
+        f"QTD TRANSAÇÕES: {r['total_transacoes']}\n"
+    )
+
+    if cats:
+        dados += "\nCATEGORIAS:\n" + "\n".join(
+            f"- {c['categoria']}: R$ {c['total']:.2f} ({c['qtde']}x)"
+            for c in cats
+        )
+
+    if contas:
+        dados += "\n\nCONTAS:\n" + "\n".join(
+            f"- {c['conta']}: R$ {c['total']:.2f} ({c['qtde']}x)"
+            for c in contas
+        )
+
+    # ─── Consolidar descrições (com tolerância a erro de digitação) ──
+    transacoes = db.listar(limite=500, mes=mes_atual)
+    palavras_ignorar = {"de", "da", "do", "na", "no", "em", "para", "com", "e", "a", "o", "que", "é", "um", "uma", "pra"}
+    itens_por_categoria = {}
+    for t in transacoes:
+        desc = (t.get("descricao") or "").strip().lower()
+        if not desc:
+            continue
+        cat = t["categoria"]
+        if cat not in itens_por_categoria:
+            itens_por_categoria[cat] = []
+        partes = [p.strip().rstrip(",") for p in desc.replace(",", ",").split(",")]
+        for p in partes:
+            if p and p not in palavras_ignorar:
+                itens_por_categoria[cat].append(p)
+
+    if itens_por_categoria:
+        dados += "\n\nITENS COMPRADOS POR CATEGORIA:"
+        for cat, itens in sorted(itens_por_categoria.items()):
+            agrupados = []
+            usados = set()
+            for item in sorted(set(itens)):
+                if item in usados:
+                    continue
+                similares = [x for x in itens if x not in usados and difflib.SequenceMatcher(None, item, x).ratio() >= 0.8]
+                total = len(similares)
+                usados.update(similares)
+                agrupados.append((item, total))
+            agrupados.sort(key=lambda x: -x[1])
+            items_str = ", ".join(f"{item} ({v}x)" for item, v in agrupados[:10])
+            dados += f"\n- {cat}: {items_str}"
+
+    if len(meses) > 1:
+        mes_passado = meses[1]
+        rp = db.resumo_mes(mes=mes_passado)
+        variacao = ((r['total_gasto'] - rp['total_gasto']) / rp['total_gasto'] * 100) if rp['total_gasto'] > 0 else 0
+        dados += f"\n\nMÊS ANTERIOR ({mes_passado}): R$ {rp['total_gasto']:.2f} (variação: {variacao:+.1f}%)"
+
+    prompt = (
+        "Você é um coach financeiro. Analise estes dados do mês e responda em 3 parágrafos:\n"
+        "1) Diagnóstico rápido do mês — destaque os itens que mais aparecem\n"
+        "2) Sugestões de economia baseadas nos itens comprados\n"
+        "3) Uma meta simples para o próximo mês\n\n"
+        f"{dados}"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{OLLAMA_BASE}/api/chat",
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "options": {"num_ctx": 4096},
+                    "stream": False,
+                },
+            )
+            resp.raise_for_status()
+            reply = resp.json()["message"]["content"]
+    except Exception as e:
+        reply = f"Erro: {e}"
+
+    buttons = [[InlineKeyboardButton("💰 Menu Finanças", callback_data="menu_back_financa")]]
+    await query.edit_message_text(
+        f"🤖 *Insights — {mes_atual}*\n\n{reply[:3000]}",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode="Markdown",
+    )
+
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not _check_whitelist(update):
@@ -166,6 +284,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         buttons = [
             [InlineKeyboardButton("➕ Add despesa", callback_data="menu_financa_add")],
             [InlineKeyboardButton("📊 Resumo", callback_data="menu_financa_resumo")],
+            [InlineKeyboardButton("🤖 Insights IA", callback_data="menu_financa_insights")],
             [InlineKeyboardButton("🔙 Voltar", callback_data="menu_back")],
         ]
         await query.edit_message_text(
@@ -193,6 +312,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         buttons = [
             [InlineKeyboardButton("➕ Add despesa", callback_data="menu_financa_add")],
             [InlineKeyboardButton("📊 Resumo", callback_data="menu_financa_resumo")],
+            [InlineKeyboardButton("🤖 Insights IA", callback_data="menu_financa_insights")],
             [InlineKeyboardButton("🔙 Voltar", callback_data="menu_back")],
         ]
         await query.edit_message_text(
@@ -205,6 +325,10 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "menu_finance_cancel":
         context.user_data.pop("finance", None)
         await query.edit_message_text("❌ Registro cancelado.")
+        return
+
+    if query.data == "menu_financa_insights":
+        await financa_insights(query, context)
         return
 
     if query.data == "menu_youtube":
