@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.env.example
+node_modules/
+desktop/node_modules/
+desktop/package-lock.json
+financas.db
+logs/*.jsonl
+drive_files/*
+!drive_files/.gitkeep
+trilha_projetos/*/_opencode.log
+trilha_projetos/*/prompt.txt
+desktop/dist/
+desktop/release/

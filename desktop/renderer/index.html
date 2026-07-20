@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CyberBot</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="sidebar">
+    <div class="logo">
+      <span class="neon">CYBER</span>BOT
+    </div>
+    <nav>
+      <a class="active" data-module="dashboard">
+        <span class="icon">◆</span> Dashboard
+      </a>
+      <a data-module="financas">
+        <span class="icon">💰</span> Finanças
+      </a>
+      <a data-module="drive">
+        <span class="icon">📁</span> Drive
+      </a>
+      <a data-module="trilha">
+        <span class="icon">🧠</span> Trilha Rede
+      </a>
+      <a data-module="security">
+        <span class="icon">🛡️</span> Security
+      </a>
+      <a data-module="placeholder1" class="disabled">
+        <span class="icon">■</span> Em breve...
+      </a>
+    </nav>
+    <div id="sysmonCard" class="sysmon-card">
+      <div class="sysmon-row"><span class="sysmon-label">CPU</span><span class="sysmon-val" id="smCpu">-</span><span class="sysmon-label" style="margin-left:10px">🌡</span><span class="sysmon-val" id="smTemp">-</span></div>
+      <div class="sysmon-row"><span class="sysmon-label">RAM</span><span class="sysmon-val" id="smRam">-</span></div>
+      <div class="sysmon-row" id="smGpuRow" style="display:none"><span class="sysmon-label">GPU</span><span class="sysmon-val" id="smGpuPct">-</span><span class="sysmon-label" style="margin-left:10px">🌡</span><span class="sysmon-val" id="smGpuTemp">-</span></div>
+      <div class="sysmon-row" id="smVramRow" style="display:none"><span class="sysmon-label">VRAM</span><span class="sysmon-val" id="smVram">-</span></div>
+    </div>
+    <div class="bot-control">
+      <button id="btnBot" class="btn-start" onclick="toggleBot()">
+        ▶ INICIAR BOT
+      </button>
+      <span id="botStatus" class="status offline">OFFLINE</span>
+    </div>
+  </div>
+
+  <main id="content">
+    <div class="module" id="module-dashboard">
+      <h1>Dashboard</h1>
+
+      <h2 class="section-title">🖥 Status</h2>
+      <div class="cards">
+        <div class="card"><div class="label">Bot</div><div class="value" id="statusBot">Offline</div></div>
+        <div class="card"><div class="label">Ollama</div><div id="statusOllama" class="value change-model-btn" title="Clique para trocar">-</div></div>
+        <div class="card"><div class="label">Contexto</div><div id="statusContexto" class="value">-</div></div>
+      </div>
+
+      <h2 class="section-title">💰 Finanças</h2>
+      <div class="cards">
+        <div class="card wide">
+          <div class="multi-stats">
+            <div class="stat"><div class="label">Despesas</div><div class="value" id="totalTransacoes">-</div></div>
+            <div class="stat"><div class="label">Gasto no mês</div><div class="value" id="gastoMes">R$ -</div></div>
+            <div class="stat"><div class="label">Maior gasto</div><div class="value" id="topCategoria">-</div></div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title">📁 Drive</h2>
+      <div class="cards">
+        <div class="card wide clickable" data-go="drive">
+          <div class="multi-stats">
+            <div class="stat"><div class="label">Pastas</div><div class="value" id="drivePastas">-</div></div>
+            <div class="stat"><div class="label">Arquivos</div><div class="value" id="driveArquivos">-</div></div>
+            <div class="stat"><div class="label">Armazenamento</div><div class="value" id="driveTamanho">-</div></div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title">👥 Usuários</h2>
+      <div class="cards">
+        <div class="card wide" id="usersCard">
+          <div class="multi-stats">
+            <div class="stat"><div class="label">Total</div><div class="value" id="usersTotal">-</div></div>
+            <div class="stat"><div class="label"> </div><div class="value"><button class="btn-start" id="usersToggleBtn" style="font-size:11px;padding:4px 12px">📋 Ver todos</button></div></div>
+          </div>
+          <div id="usersDetail" class="hidden" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+            <div id="usersContent"><p class="loading">Carregando...</p></div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title clickable" id="logSectionTitle">📡 Acessos (Telegram) <span id="logToggle" class="toggle-icon">▶</span></h2>
+      <div class="cards">
+        <div class="card wide" id="logStatsCard">
+          <div class="multi-stats">
+            <div class="stat log-date-filter" id="logDateFilter"><div class="label">Data</div><div class="value" id="logDateDisplay">📅 Carregando...</div></div>
+            <div class="stat"><div class="label">Total</div><div class="value" id="logTotal">-</div></div>
+            <div class="stat"><div class="label">Bloqueados</div><div class="value" id="logBlocked" style="cursor:pointer;color:var(--danger)" title="Clique para ver detalhes">-</div></div>
+            <div class="stat"><div class="label">Tamanho</div><div class="value" id="logSize">-</div></div>
+          </div>
+          <div id="logDatePicker" class="log-date-picker hidden"></div>
+        </div>
+      </div>
+      <div class="card wide">
+        <div class="label">Acessos por hora</div>
+        <div id="logChart" class="chart"></div>
+      </div>
+      <div id="logDetail" class="hidden">
+        <div class="card wide">
+          <div class="label">Detalhamento de hoje</div>
+          <div id="logDetailContent"><p class="loading">Carregando...</p></div>
+        </div>
+      </div>
+
+      <h2 class="section-title clickable" id="whitelistSectionTitle">🔒 Whitelist <span id="whitelistToggle" class="toggle-icon">▶</span></h2>
+      <div class="cards">
+        <div class="card"><div class="label">Usuários liberados</div><div class="value" id="whitelistCount">-</div></div>
+        <div class="card"><div class="label">Proteção</div><div class="value" id="whitelistStatus">-</div></div>
+      </div>
+      <div id="whitelistDetail" class="hidden">
+        <div class="card wide">
+          <div class="label">Gerenciar liberados</div>
+          <div class="wl-input-row">
+            <input type="number" id="wlUserId" class="wl-input" placeholder="ID do Telegram">
+            <input type="text" id="wlUsername" class="wl-input" placeholder="@username (opcional)">
+            <input type="text" id="wlLabel" class="wl-input" placeholder="Apelido">
+            <button class="btn-start btn-wl-add" id="btnWlAdd">➕ Adicionar</button>
+          </div>
+          <div id="whitelistTableWrap"></div>
+        </div>
+      </div>
+
+      <h2 class="section-title">⚙ Sistema</h2>
+      <div class="cards">
+        <div class="card"><div class="label">Cache</div><div class="value" id="statusCache">-</div></div>
+      </div>
+    </div>
+
+    <div class="module hidden" id="module-trilha">
+      <h1>🧠 Trilha Rede</h1>
+      <div class="cards">
+        <div class="card wide">
+          <div class="label">Projetos</div>
+          <div id="trilhaContent">
+            <p class="loading">Carregando...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="module hidden" id="module-drive">
+      <div class="drive-header">
+        <h1>📁 Drive</h1>
+        <div class="drive-breadcrumb" id="driveBreadcrumb">
+          <a href="#" data-folder="">Drive</a>
+        </div>
+      </div>
+      <div id="driveContent">
+        <p class="loading">Carregando...</p>
+      </div>
+    </div>
+
+    <div class="module hidden" id="module-financas">
+      <h1>Finanças</h1>
+      <div class="month-filter">
+        <label for="mesSelect">Mês:</label>
+        <select id="mesSelect" onchange="changeMonth(this.value)"></select>
+      </div>
+      <div class="cards">
+        <div class="card wide">
+          <div class="label">Despesas por categoria</div>
+          <div id="graficoCat" class="chart"></div>
+        </div>
+        <div class="card wide">
+          <div class="label">Despesas por conta</div>
+          <div id="graficoConta" class="chart"></div>
+        </div>
+      </div>
+      <div class="card wide">
+        <div class="label">Últimas transações</div>
+        <table id="tabelaFinancas">
+          <thead><tr><th>Data</th><th>Categoria</th><th>Conta</th><th>Valor</th><th>Descrição</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="module hidden" id="module-security">
+      <h1>🛡️ Security</h1>
+      <div class="sec-controls">
+        <button class="btn-start" id="secRunAll">▶ Rodar Todos</button>
+        <button class="btn-start" id="secReport">📄 Gerar Relatório</button>
+        <button class="btn-start" id="secReportsBtn">📁 Relatórios</button>
+        <span id="secStatus" class="sec-status"></span>
+      </div>
+      <div id="secReportsList" class="hidden">
+        <div class="card wide">
+          <div class="label">Relatórios salvos</div>
+          <div id="secReportsContent"><p class="loading">Carregando...</p></div>
+        </div>
+      </div>
+      <div id="secResults" class="sec-grid"></div>
+    </div>
+  </main>
+
+  <div id="modalOverlay" class="modal-overlay hidden" onclick="closeModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-label">Trocar modelo do Ollama</div>
+      <select id="modalSelect" class="modal-input"></select>
+      <div class="modal-buttons">
+        <button class="btn-start" id="modalConfirm">OK</button>
+        <button class="btn-start btn-stop" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="blockedOverlay" class="modal-overlay hidden" onclick="closeBlocked()">
+    <div class="modal-box modal-wide" onclick="event.stopPropagation()">
+      <div class="modal-label">🚫 Acessos bloqueados hoje</div>
+      <div id="blockedContent"><p class="loading">Carregando...</p></div>
+      <div class="modal-buttons">
+        <button class="btn-start btn-stop" onclick="closeBlocked()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sendOverlay" class="modal-overlay hidden" onclick="closeSend()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-label" id="sendLabel">Enviar mensagem</div>
+      <textarea id="sendText" class="modal-input send-textarea" placeholder="Digite a mensagem..." rows="4"></textarea>
+      <div id="sendStatus" class="send-status hidden"></div>
+      <div class="modal-buttons">
+        <button class="btn-start" id="sendConfirm">📤 Enviar</button>
+        <button class="btn-start btn-stop" onclick="closeSend()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reportOverlay" class="modal-overlay hidden" onclick="closeReport()">
+    <div class="modal-box modal-wide" onclick="event.stopPropagation()">
+      <div class="modal-label">🤖 Relatório de Segurança com IA</div>
+      <div class="report-section"><strong>Análise da IA:</strong></div>
+      <div id="reportIaText" class="report-ia-text">Carregando...</div>
+      <div class="report-section" style="margin-top:12px"><strong>Resumo das verificações:</strong></div>
+      <div id="reportResults"></div>
+      <div class="modal-buttons" style="margin-top:12px">
+        <button class="btn-start btn-stop" onclick="closeReport()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
