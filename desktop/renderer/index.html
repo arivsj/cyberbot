@@ -30,12 +30,24 @@
       <a data-module="cleanup">
         <span class="icon">🧹</span> Limpeza
       </a>
+      <a data-module="rag">
+        <span class="icon">📚</span> RAG
+      </a>
+      <a data-module="websearch">
+        <span class="icon">🔍</span> Web Search
+      </a>
+      <a data-module="plugins">
+        <span class="icon">🧩</span> Plugins
+      </a>
     </nav>
     <div id="sysmonCard" class="sysmon-card">
-      <div class="sysmon-row"><span class="sysmon-label">CPU</span><span class="sysmon-val" id="smCpu">-</span><span class="sysmon-label" style="margin-left:10px">🌡</span><span class="sysmon-val" id="smTemp">-</span></div>
-      <div class="sysmon-row"><span class="sysmon-label">RAM</span><span class="sysmon-val" id="smRam">-</span></div>
-      <div class="sysmon-row" id="smGpuRow" style="display:none"><span class="sysmon-label">GPU</span><span class="sysmon-val" id="smGpuPct">-</span><span class="sysmon-label" style="margin-left:10px">🌡</span><span class="sysmon-val" id="smGpuTemp">-</span></div>
-      <div class="sysmon-row" id="smVramRow" style="display:none"><span class="sysmon-label">VRAM</span><span class="sysmon-val" id="smVram">-</span></div>
+      <canvas id="matrixCanvas" class="matrix-canvas"></canvas>
+      <div class="sysmon-content">
+        <div class="sysmon-row"><span class="sysmon-label">CPU</span><span class="sysmon-val" id="smCpu">-</span><span class="sysmon-label" style="margin-left:10px">🌡</span><span class="sysmon-val" id="smTemp">-</span></div>
+        <div class="sysmon-row"><span class="sysmon-label">RAM</span><span class="sysmon-val" id="smRam">-</span></div>
+        <div class="sysmon-row" id="smGpuRow" style="display:none"><span class="sysmon-label">GPU</span><span class="sysmon-val" id="smGpuPct">-</span><span class="sysmon-label" style="margin-left:10px">🌡</span><span class="sysmon-val" id="smGpuTemp">-</span></div>
+        <div class="sysmon-row" id="smVramRow" style="display:none"><span class="sysmon-label">VRAM</span><span class="sysmon-val" id="smVram">-</span></div>
+      </div>
     </div>
     <div class="bot-control">
       <button id="btnBot" class="btn-start" onclick="toggleBot()">
@@ -132,10 +144,6 @@
         </div>
       </div>
 
-      <h2 class="section-title">⚙ Sistema</h2>
-      <div class="cards">
-        <div class="card"><div class="label">Cache</div><div class="value" id="statusCache">-</div></div>
-      </div>
     </div>
 
     <div class="module hidden" id="module-trilha">
@@ -201,6 +209,14 @@
           <div id="secReportsContent"><p class="loading">Carregando...</p></div>
         </div>
       </div>
+      <div class="sec-scanner-overlay" id="secScannerOverlay">
+        <canvas id="secMatrixCanvas" class="sec-matrix-canvas"></canvas>
+        <div class="sec-scanner-content">
+          <div class="sec-scanner-progress" id="secScannerProgress">0 / 12</div>
+          <div class="sec-scanner-check" id="secScannerCheck">INICIALIZANDO...</div>
+          <div class="sec-scanner-bar"><div class="sec-scanner-fill" id="secScannerFill"></div></div>
+        </div>
+      </div>
       <div id="secResults" class="sec-grid"></div>
     </div>
 
@@ -218,6 +234,55 @@
         </div>
       </div>
       <div id="clTasks" class="sec-grid"></div>
+    </div>
+
+    <div class="module hidden" id="module-rag">
+      <h1>📚 RAG — Base de Conhecimento</h1>
+      <div class="cards">
+        <div class="card wide">
+          <div class="label">📖 Como usar</div>
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.6">1. Envie PDF ou TXT no Telegram com legenda <code>/rag</code><br>2. Depois use <code>/rag sua pergunta</code> para consultar</div>
+        </div>
+        <div class="card wide">
+          <div class="label">📄 Documentos Indexados</div>
+          <div id="ragDocList"><p class="loading">Carregando...</p></div>
+        </div>
+        <div class="card wide">
+          <div class="label">🔍 Consultar</div>
+          <div class="wl-input-row">
+            <input type="text" id="ragQuery" class="wl-input" placeholder="Faça uma pergunta...">
+            <button class="btn-start" id="ragQueryBtn">Perguntar</button>
+          </div>
+          <div id="ragAnswer" class="hidden" style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)"></div>
+        </div>
+      </div>
+      <div class="sec-controls"><span id="ragStatus" class="sec-status"></span></div>
+    </div>
+
+    <div class="module hidden" id="module-websearch">
+      <h1>🔍 Web Search</h1>
+      <div class="cards">
+        <div class="card wide">
+          <div class="label">🌐 Buscar na Web</div>
+          <div class="wl-input-row">
+            <input type="text" id="wsQuery" class="wl-input" placeholder="Pesquisar na web...">
+            <button class="btn-start" id="wsSearchBtn">Buscar</button>
+          </div>
+          <div id="wsResults" class="hidden" style="margin-top:12px"></div>
+        </div>
+      </div>
+      <div class="sec-controls"><span id="wsStatus" class="sec-status"></span></div>
+    </div>
+
+    <div class="module hidden" id="module-plugins">
+      <h1>🧩 Plugins</h1>
+      <div class="cards">
+        <div class="card wide">
+          <div class="label">🔌 Plugins Instalados</div>
+          <div id="pluginList"><p class="loading">Carregando...</p></div>
+        </div>
+      </div>
+      <div class="sec-controls"><span id="plStatus" class="sec-status"></span></div>
     </div>
   </main>
 
@@ -278,6 +343,55 @@
         <button class="btn-start btn-stop" onclick="closeSudo()">Cancelar</button>
       </div>
     </div>
+  </div>
+
+  <div class="module hidden" id="module-rag">
+    <h1>📚 RAG — Base de Conhecimento</h1>
+    <div class="cards">
+      <div class="card wide">
+        <div class="label">📖 Como usar</div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.6">1. Envie PDF ou TXT no Telegram com legenda <code>/rag</code><br>2. Depois use <code>/rag sua pergunta</code> para consultar</div>
+      </div>
+      <div class="card wide">
+        <div class="label">📄 Documentos Indexados</div>
+        <div id="ragDocList"><p class="loading">Carregando...</p></div>
+      </div>
+      <div class="card wide">
+        <div class="label">🔍 Consultar</div>
+        <div class="wl-input-row">
+          <input type="text" id="ragQuery" class="wl-input" placeholder="Faça uma pergunta...">
+          <button class="btn-start" id="ragQueryBtn">Perguntar</button>
+        </div>
+        <div id="ragAnswer" class="hidden" style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)"></div>
+      </div>
+    </div>
+    <div class="sec-controls"><span id="ragStatus" class="sec-status"></span></div>
+  </div>
+
+  <div class="module hidden" id="module-websearch">
+    <h1>🔍 Web Search</h1>
+    <div class="cards">
+      <div class="card wide">
+        <div class="label">🌐 Buscar na Web</div>
+        <div class="wl-input-row">
+          <input type="text" id="wsQuery" class="wl-input" placeholder="Pesquisar na web...">
+          <button class="btn-start" id="wsSearchBtn">Buscar</button>
+        </div>
+        <div id="wsResults" class="hidden" style="margin-top:12px"></div>
+      </div>
+    </div>
+    <div class="sec-controls"><span id="wsStatus" class="sec-status"></span></div>
+  </div>
+
+  <div class="module hidden" id="module-plugins">
+    <h1>🧩 Plugins</h1>
+    <div class="cards">
+      <div class="card wide">
+        <div class="label">🔌 Plugins Instalados</div>
+        <div id="pluginList"><p class="loading">Carregando...</p></div>
+      </div>
+    </div>
+    <div class="sec-controls"><span id="plStatus" class="sec-status"></span></div>
   </div>
 
   <script src="app.js"></script>

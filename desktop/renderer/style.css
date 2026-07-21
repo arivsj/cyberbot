@@ -26,7 +26,7 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 240px;
+  width: 280px;
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
@@ -66,6 +66,7 @@ nav a.disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* Sysmon */
 .sysmon-card {
+  position: relative;
   background: rgba(0,0,0,0.4);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -75,24 +76,52 @@ nav a.disabled { opacity: 0.3; cursor: not-allowed; }
   line-height: 1.6;
   cursor: pointer;
   transition: border-color 0.3s;
+  overflow: hidden;
+  min-height: 120px;
 }
 .sysmon-card:hover { border-color: var(--neon); }
+
+.matrix-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.12;
+  z-index: 1;
+}
+
+.sysmon-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  gap: 4px;
+}
+
 .sysmon-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
 }
 .sysmon-label {
-  color: var(--text-dim);
+  color: var(--text);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1.5px;
   font-family: 'Orbitron', sans-serif;
-  font-size: 9px;
+  font-size: 11px;
+  font-weight: 400;
 }
 .sysmon-val {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 800;
   transition: color 1s;
 }
 
@@ -485,7 +514,117 @@ tr:hover td { background: var(--surface2); }
 #logSize { cursor: pointer; }
 #logSize:hover { text-shadow: 0 0 8px var(--neon); }
 
+/* RAG / WebSearch / Plugins */
+.rag-query-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.rag-doc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.rag-doc-item:last-child { border-bottom: none; }
+.rag-doc-name {
+  flex: 1;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+}
+.rag-doc-meta {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 /* Security */
+.sec-scanner-overlay {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: none;
+  background: rgba(0,0,0,0.6);
+}
+.sec-scanner-overlay.active {
+  display: block;
+}
+.sec-matrix-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.2;
+}
+.sec-scanner-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+}
+.sec-scanner-progress {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 32px;
+  color: var(--neon);
+  text-shadow: 0 0 20px rgba(0,255,247,0.5);
+  letter-spacing: 2px;
+}
+.sec-scanner-check {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: var(--neon);
+  text-shadow: 0 0 10px rgba(0,255,247,0.3);
+  letter-spacing: 1px;
+}
+.sec-scanner-bar {
+  width: 300px;
+  height: 4px;
+  background: rgba(0,255,247,0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.sec-scanner-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--neon), #00ff41);
+  border-radius: 2px;
+  transition: width 0.3s;
+  box-shadow: 0 0 10px rgba(0,255,247,0.4);
+}
+
+/* Scanning card state */
+.sec-scanning {
+  border-color: var(--neon3) !important;
+  box-shadow: 0 0 15px rgba(255,107,0,0.15), inset 0 0 30px rgba(0,255,247,0.03) !important;
+  animation: secPulse 1.2s ease-in-out infinite;
+}
+@keyframes secPulse {
+  0%, 100% { border-color: var(--neon3); }
+  50% { border-color: var(--neon); box-shadow: 0 0 20px rgba(0,255,247,0.2), inset 0 0 30px rgba(0,255,247,0.05); }
+}
+.sec-scanner-spinner {
+  width: 24px;
+  height: 24px;
+  margin: 8px auto;
+  border: 2px solid rgba(0,255,247,0.15);
+  border-top-color: var(--neon);
+  border-radius: 50%;
+  animation: secSpin 0.8s linear infinite;
+}
+@keyframes secSpin {
+  to { transform: rotate(360deg); }
+}
 .sec-controls {
   display: flex;
   gap: 10px;
@@ -549,6 +688,8 @@ tr:hover td { background: var(--surface2); }
 .risk-high { background: rgba(255,0,68,0.15); border: 1px solid var(--danger); color: var(--danger); }
 .risk-atten { background: rgba(255,107,0,0.15); border: 1px solid var(--neon3); color: var(--neon3); }
 .risk-low { background: rgba(0,255,247,0.1); border: 1px solid var(--neon); color: var(--neon); }
+
+
 .sec-risk-label { font-size: 10px; font-family: 'Orbitron', sans-serif; padding: 2px 6px; border-radius: 3px; }
 .sec-card .sec-risk-label { color: var(--danger); border: 1px solid var(--danger); }
 .sec-ok .sec-risk-label { color: var(--neon) !important; border-color: var(--neon) !important; }
@@ -565,6 +706,20 @@ tr:hover td { background: var(--surface2); }
 .sec-chart-fill.chart-ok { background: linear-gradient(180deg, var(--neon), transparent); }
 .sec-chart-fill.chart-alert { background: linear-gradient(180deg, var(--danger), transparent); }
 .sec-chart-val { font-size: 10px; font-family: 'Orbitron', sans-serif; color: var(--text); }
+.sec-chart-total {
+  text-align: center;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  color: var(--danger);
+  letter-spacing: 1px;
+}
+.sec-chart-total strong {
+  font-size: 18px;
+  text-shadow: 0 0 10px rgba(255,0,68,0.4);
+}
 .report-ia-text { font-size: 13px; color: var(--text); line-height: 1.6; padding: 12px; background: var(--bg); border-radius: 6px; border: 1px solid var(--border); max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
 .report-section { font-size: 12px; color: var(--neon); margin-bottom: 8px; font-family: 'Orbitron', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
 .sec-report-line { font-size: 13px; padding: 4px 0; }

@@ -71,17 +71,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 MAIN_MENU_TEXT = "📋 *Menu de funcionalidades*"
-MAIN_MENU_BUTTONS = [
-    [InlineKeyboardButton("📁 Drive", callback_data="d_main")],
-    [InlineKeyboardButton("🎬 YouTube", callback_data="menu_youtube")],
-    [InlineKeyboardButton("💰 Finanças", callback_data="menu_financas")],
-    [InlineKeyboardButton("🧠 Trilha Rede", callback_data="tr_main")],
-    [InlineKeyboardButton("📱 PC Apps", callback_data="pc_main")],
-    [InlineKeyboardButton("🛡️ Security", callback_data="sec_main")],
-    [InlineKeyboardButton("🧹 Limpeza", callback_data="cl_main")],
-    [InlineKeyboardButton("🔄 Trocar modelo", callback_data="menu_model"),
-     InlineKeyboardButton("🧹 Limpar histórico", callback_data="menu_clear")],
+MAIN_MENU_ITEMS = [
+    ("💰 Finanças", "menu_financas"), ("📱 PC Apps", "pc_main"), ("🔍 Web Search", "menu_websearch"),
+    ("🧠 Trilha Rede", "tr_main"), ("🧩 Plugins", "menu_plugins"), ("🛡️ Security", "sec_main"),
+    ("📁 Drive", "d_main"), ("🎬 YouTube", "menu_youtube"), ("📚 RAG", "menu_rag"),
+    ("🧹 Limpeza", "cl_main"), ("🔄 Trocar modelo", "menu_model"), ("⏳ Clear", "menu_clear"),
 ]
+MAIN_MENU_BUTTONS = []
+for i in range(0, len(MAIN_MENU_ITEMS), 3):
+    row = [InlineKeyboardButton(label, callback_data=cb) for label, cb in MAIN_MENU_ITEMS[i:i+3]]
+    MAIN_MENU_BUTTONS.append(row)
 MAIN_MENU_MARKUP = InlineKeyboardMarkup(MAIN_MENU_BUTTONS)
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -331,6 +330,84 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "menu_financa_insights":
         await financa_insights(query, context)
+        return
+
+    if query.data == "menu_rag":
+        buttons = [[InlineKeyboardButton("🔙 Voltar", callback_data="menu_back")]]
+        await query.edit_message_text(
+            "📚 *RAG — Base de Conhecimento*\n\n"
+            "Pergunte sobre documentos que você enviar e eu respondo com base no conteúdo deles!\n\n"
+            "📌 *Como usar:*\n"
+            "1. Envie um PDF ou TXT com a legenda <code>/rag</code>\n"
+            "2. Eu vou extrair o texto e indexar na base de conhecimento\n"
+            "3. Depois use <code>/rag sua pergunta</code> para consultar\n\n"
+            "💡 *Exemplo:*\n"
+            "Envio um contrato PDF com legenda <code>/rag</code>\n"
+            "Depois pergunto: <code>/rag qual o valor do contrato?</code>\n\n"
+            "📂 Arquivos suportados: PDF, TXT",
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="Markdown",
+        )
+        return
+
+    if query.data == "menu_criarplugin":
+        context.user_data["criarplugin"] = True
+        await query.edit_message_text(
+            "🤖 *Criar Plugin*\n\n"
+            "Descreva a *ideia* do plugin que você quer criar.\n\n"
+            "💡 *Exemplo:*\n"
+            "`um plugin que consulta previsão do tempo por cidade`\n\n"
+            "✏️ *Digite a descrição agora:*\n\n"
+            "_(ou /cancel para cancelar)_",
+            parse_mode="Markdown",
+        )
+        return
+
+    if query.data == "menu_websearch":
+        buttons = [[InlineKeyboardButton("🔙 Voltar", callback_data="menu_back")]]
+        await query.edit_message_text(
+            "🔍 *Web Search*\n\n"
+            "Busque informações atualizadas na internet!\n\n"
+            "📌 *Como usar:*\n"
+            "Use o comando: <code>/busca sua pergunta</code>\n\n"
+            "💡 *Exemplos:*\n"
+            "• <code>/busca preço do Bitcoin hoje</code>\n"
+            "• <code>/busca previsão do tempo São Paulo</code>\n"
+            "• <code>/busca últimas notícias tecnologia</code>\n\n"
+            "🔗 A IA busca na web e responde com as fontes!",
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="Markdown",
+        )
+        return
+
+    if query.data == "menu_plugins":
+        from plugin_loader import plugins as pl_plugins
+        buttons = []
+        for pname, p in pl_plugins.items():
+            cmds = ", ".join(f"/{c.lstrip('/')}" for c, _ in getattr(p, "commands", []))
+            label = f"{pname}" + (f" — {cmds}" if cmds else "")
+            buttons.append([InlineKeyboardButton(f"🧩 {label}", callback_data=f"menu_plugin_{pname}")])
+        buttons.append([InlineKeyboardButton("🤖 Criar Plugin", callback_data="menu_criarplugin")])
+        buttons.append([InlineKeyboardButton("🔙 Voltar", callback_data="menu_back")])
+        if not pl_plugins:
+            text = "🧩 *Plugins*\n\nNenhum plugin instalado no momento."
+        else:
+            text = "🧩 *Plugins Disponíveis*\n\nClique em um plugin para ver detalhes:"
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+        return
+
+    if query.data.startswith("menu_plugin_"):
+        pname = query.data.replace("menu_plugin_", "")
+        from plugin_loader import plugins as pl_plugins
+        p = pl_plugins.get(pname)
+        if not p:
+            await query.edit_message_text("❌ Plugin não encontrado.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Voltar", callback_data="menu_back")]]))
+            return
+        desc = getattr(p, "description", "Sem descrição")
+        cmds = "\n".join(f"• /{c.lstrip('/')}" for c, _ in getattr(p, "commands", []))
+        text = f"🧩 *{pname}*\n\n{desc}\n\n*Comandos:*\n{cmds}" if cmds else f"🧩 *{pname}*\n\n{desc}"
+        buttons = [[InlineKeyboardButton("🔙 Voltar", callback_data="menu_plugins")]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
         return
 
     if query.data == "menu_youtube":
@@ -813,6 +890,24 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Acesso negado.")
         return
     _log_update(update, "document")
+
+    caption = (update.message.caption or "").strip()
+    if caption.lower().startswith("/rag"):
+        doc = update.message.document
+        file = await doc.get_file()
+        file_bytes = await file.download_as_bytearray()
+        temp_path = os.path.join(db.DRIVE_DIR, f"__rag_{doc.file_name or 'file'}")
+        with open(temp_path, "wb") as f:
+            f.write(file_bytes)
+        msg = await update.message.reply_text("📚 *Indexando documento para RAG...*", parse_mode="Markdown")
+        ok = rag.index_file(temp_path, doc.file_name or "documento")
+        os.remove(temp_path)
+        if ok:
+            await msg.edit_text(f"✅ *Documento indexado!*\n\nUse `/rag sua pergunta` para consultar.", parse_mode="Markdown")
+        else:
+            await msg.edit_text("❌ Erro ao indexar documento. Tente: `sudo apt install poppler-utils` ou `pip install PyMuPDF`")
+        return
+
     drive = context.user_data.get("drive")
     if not drive or drive.get("step") != "awaiting_file":
         await update.message.reply_text(
@@ -1586,6 +1681,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif context.user_data.get("youtube"):
         context.user_data.pop("youtube", None)
         await update.message.reply_text("❌ Download cancelado.")
+    elif context.user_data.get("criarplugin"):
+        context.user_data.pop("criarplugin", None)
+        await update.message.reply_text("❌ Criação de plugin cancelada.")
+        await update.message.reply_text(MAIN_MENU_TEXT, reply_markup=MAIN_MENU_MARKUP, parse_mode="Markdown")
     else:
         await update.message.reply_text("Nada para cancelar.")
 
@@ -1601,6 +1700,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("drive"):
         if await handle_drive_text(update, context):
             return
+
+    if context.user_data.get("criarplugin") and not user_message.startswith("/"):
+        context.user_data.pop("criarplugin", None)
+        await criarplugin_por_descricao(update, context, user_message)
+        return
 
     yt_url = youtube.extract_url(user_message)
     if yt_url:
@@ -1645,6 +1749,198 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["history"].append({"role": "assistant", "content": reply})
     await thinking.delete()
     await send_with_code_blocks(update, reply)
+
+# ─── RAG ────────────────────────────────────────────────
+
+import rag
+
+async def rag_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _check_whitelist(update):
+        return
+    question = " ".join(context.args) if context.args else ""
+    if not question:
+        await update.message.reply_text("📚 *RAG — Base de Conhecimento*\n\nUse: `/rag sua pergunta`\n\nPrimeiro indexe documentos enviando arquivos com a legenda `/rag` no Telegram.", parse_mode="Markdown")
+        return
+    thinking = await update.message.reply_text("📚 *Buscando nos documentos...*", parse_mode="Markdown")
+    context_text, sources = rag.query_with_context(question)
+    if not context_text:
+        await thinking.delete()
+        await update.message.reply_text("📚 Nenhum documento relevante encontrado. Indexe arquivos enviando PDF/TXT com a legenda `/rag`.")
+        return
+    prompt = (
+        "Você é um assistente. Use o contexto abaixo para responder. "
+        "Se não houver informação suficiente, diga que não sabe. "
+        "Sempre mencione as fontes.\n\n"
+        f"Contexto:\n{context_text}\n\n"
+        f"Pergunta: {question}\nResposta:"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{OLLAMA_BASE}/api/chat",
+                json={
+                    "model": context.user_data.get("model", MODEL),
+                    "messages": [{"role": "user", "content": prompt}],
+                    "options": ollama_utils.get_chat_options(context.user_data.get("model", MODEL)),
+                    "stream": False,
+                },
+            )
+            reply = resp.json().get("message", {}).get("content", "Erro.") if resp.status_code == 200 else "IA indisponível"
+    except Exception as e:
+        reply = f"Erro: {e}"
+    await thinking.delete()
+    footer = "\n\n📚 *Fontes:* " + ", ".join(sources[:3]) if sources else ""
+    await send_with_code_blocks(update, reply + footer)
+
+# ─── Web Search ─────────────────────────────────────────
+
+import websearch
+
+async def busca_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _check_whitelist(update):
+        return
+    query = " ".join(context.args) if context.args else ""
+    if not query:
+        await update.message.reply_text("🔍 *Web Search*\n\nUse: `/busca sua pergunta`\n\nExemplo: `/busca preço do Bitcoin hoje`", parse_mode="Markdown")
+        return
+    thinking = await update.message.reply_text("🔍 *Buscando na web...*", parse_mode="Markdown")
+    context_text, sources = await websearch.search_and_prepare(query)
+    if not context_text:
+        await thinking.delete()
+        await update.message.reply_text("🔍 Não encontrei resultados para essa busca.")
+        return
+    prompt = (
+        "Você é um assistente. Use o contexto abaixo para responder. "
+        "Se não souber, diga que não sabe. Cite as fontes.\n\n"
+        f"Contexto:\n{context_text}\n\n"
+        f"Pergunta: {query}\nResposta:"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{OLLAMA_BASE}/api/chat",
+                json={
+                    "model": context.user_data.get("model", MODEL),
+                    "messages": [{"role": "user", "content": prompt}],
+                    "options": ollama_utils.get_chat_options(context.user_data.get("model", MODEL)),
+                    "stream": False,
+                },
+            )
+            reply = resp.json().get("message", {}).get("content", "Erro.") if resp.status_code == 200 else "IA indisponível"
+    except Exception as e:
+        reply = f"Erro: {e}"
+    await thinking.delete()
+    footer = "\n\n🔗 *Fontes:*\n" + "\n".join(sources[:5]) if sources else ""
+    await send_with_code_blocks(update, reply + footer)
+
+# ─── Criar Plugin ───────────────────────────────────────
+
+PLUGIN_TEMPLATE = '''from plugin_loader import Plugin
+import httpx
+
+class {name}Plugin(Plugin):
+    name = "{name}"
+    description = "{desc}"
+    commands = [("/{cmd}", "cmd_{cmd}")]
+
+    async def cmd_{cmd}(self, update, context):
+        await update.message.reply_text("✅ Plugin {name} funcionando!")
+'''
+
+async def criarplugin_por_descricao(update, context, descricao):
+    msg = await update.message.reply_text("🤖 *Gerando plugin com IA...*", parse_mode="Markdown")
+
+    prompt = (
+        "Gere um plugin Python para Telegram bot. O plugin deve ser uma classe que herda de Plugin.\n\n"
+        "REGRAS:\n"
+        "- A classe deve herdar de `Plugin` (já importado)\n"
+        "- Deve ter `name`, `description` e `commands`\n"
+        "- O método do comando deve ser `async def cmd_nome(self, update, context):`\n"
+        "- Use `httpx.AsyncClient` para chamadas HTTP\n"
+        "- Responda apenas o código Python, sem explicações\n"
+        "- Use aspas duplas no código\n\n"
+        f"Descrição do plugin: {descricao}\n\n"
+        f"Exemplo de estrutura:\n{PLUGIN_TEMPLATE}\n\n"
+        "Gere apenas o código, sem markdown."
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                f"{OLLAMA_BASE}/api/chat",
+                json={
+                    "model": context.user_data.get("model", MODEL),
+                    "messages": [{"role": "user", "content": prompt}],
+                    "options": ollama_utils.get_chat_options(context.user_data.get("model", MODEL)),
+                    "stream": False,
+                },
+            )
+            code = r.json().get("message", {}).get("content", "") if r.status_code == 200 else ""
+    except Exception as e:
+        code = ""
+
+    if not code:
+        await msg.edit_text("❌ Erro ao gerar plugin com IA.")
+        return
+
+    import re
+    code = code.strip()
+    for prefix in ["```python", "```"]:
+        if code.startswith(prefix):
+            code = code[len(prefix):]
+    for suffix in ["```"]:
+        if code.endswith(suffix):
+            code = code[:-len(suffix)]
+    code = code.strip()
+
+    name_match = re.search(r'name\s*=\s*"(\w+)"', code)
+    plugin_name = name_match.group(1) if name_match else "plugin"
+    cmd_match = re.search(r'commands\s*=\s*\[\(["\'](/\w+)', code)
+    cmd_name = cmd_match.group(1).lstrip("/") if cmd_match else plugin_name
+
+    if not cmd_name or not plugin_name:
+        await msg.edit_text("❌ Não foi possível extrair nome do plugin do código gerado.")
+        return
+
+    await msg.edit_text(f"📦 *Instalando plugin* `{plugin_name}`...\n\nComando: `/{cmd_name}`", parse_mode="Markdown")
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post("http://127.0.0.1:5000/api/plugins/create", json={"name": plugin_name, "code": code})
+            if r.status_code != 200:
+                raise Exception(r.text)
+    except Exception as e:
+        await msg.edit_text(f"❌ Erro ao salvar plugin: {e}")
+        return
+
+    desc_match = re.search(r'description\s*=\s*"([^"]+)"', code)
+    plugin_desc = desc_match.group(1) if desc_match else plugin_name
+
+    await msg.edit_text(
+        f"✅ *Plugin criado com sucesso!*\n\n"
+        f"📦 *Nome:* `{plugin_name}`\n"
+        f"📝 *Descrição:* {plugin_desc}\n"
+        f"⌨️ *Comando:* `/{cmd_name}`\n\n"
+        f"🔁 O bot foi reiniciado. Use `/{cmd_name}` para testar!\n\n"
+        f"📄 *Código gerado:*\n```\n{code[:1500]}\n```",
+        parse_mode="Markdown",
+    )
+
+async def criarplugin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _check_whitelist(update):
+        return
+    descricao = " ".join(context.args) if context.args else ""
+    if not descricao:
+        await update.message.reply_text(
+            "🤖 *Criar Plugin*\n\n"
+            "Descreva o plugin que você quer criar. Eu gero o código automaticamente!\n\n"
+            "📌 *Como usar:*\n"
+            "`/criarplugin um plugin que consulta previsão do tempo por cidade`\n\n"
+            "💡 Seja específico sobre o que o plugin deve fazer.",
+            parse_mode="Markdown",
+        )
+        return
+    await criarplugin_por_descricao(update, context, descricao)
 
 def main():
     print("=" * 50)
@@ -1695,6 +1991,9 @@ def main():
     app.add_handler(CommandHandler("model", set_model))
     app.add_handler(CommandHandler("codigo", codigo))
     app.add_handler(CommandHandler("sysmon", sysmon_cmd))
+    app.add_handler(CommandHandler("rag", rag_cmd))
+    app.add_handler(CommandHandler("busca", busca_cmd))
+    app.add_handler(CommandHandler("criarplugin", criarplugin_cmd))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern="^menu_"))
     app.add_handler(CallbackQueryHandler(drive_callback, pattern="^d_"))
     app.add_handler(CallbackQueryHandler(youtube_callback, pattern="^yt_"))
@@ -1707,6 +2006,16 @@ def main():
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    import plugin_loader
+    plugin_loader.load_plugins()
+    for pname, p in plugin_loader.plugins.items():
+        for cmd_name, handler_name in getattr(p, "commands", []):
+            handler_fn = getattr(p, handler_name, None)
+            if handler_fn:
+                app.add_handler(CommandHandler(cmd_name.lstrip("/"), handler_fn))
+                print(f"[plugin] {pname}: /{cmd_name.lstrip('/')} registrado")
+
     app.run_polling()
 
 if __name__ == "__main__":

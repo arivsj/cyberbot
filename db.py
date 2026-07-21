@@ -107,6 +107,23 @@ def init():
         conn.execute("ALTER TABLE reports ADD COLUMN source TEXT DEFAULT ''")
     except:
         pass
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS rag_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS rag_chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id INTEGER NOT NULL REFERENCES rag_documents(id),
+            chunk_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            embedding BLOB,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
     os.makedirs(DRIVE_DIR, exist_ok=True)
     os.makedirs(TRILHA_DIR, exist_ok=True)
     conn.commit()
@@ -448,3 +465,62 @@ def drive_stats():
     total_size = conn.execute("SELECT COALESCE(SUM(file_size), 0) as s FROM drive_files").fetchone()["s"]
     conn.close()
     return {"pastas": folders, "arquivos": files, "total_size": total_size}
+
+# ─── RAG ────────────────────────────────────────────────
+
+import json
+
+def save_rag_document(name):
+    conn = get_conn()
+    cur = conn.execute("INSERT INTO rag_documents (name) VALUES (?)", (name,))
+    conn.commit()
+    doc_id = cur.lastrowid
+    conn.close()
+    return doc_id
+
+def get_rag_document(doc_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM rag_documents WHERE id = ?", (doc_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def list_rag_documents():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT d.*, COUNT(c.id) as chunks
+        FROM rag_documents d LEFT JOIN rag_chunks c ON c.doc_id = d.id
+        GROUP BY d.id ORDER BY d.created_at DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def delete_rag_document(doc_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM rag_chunks WHERE doc_id = ?", (doc_id,))
+    conn.execute("DELETE FROM rag_documents WHERE id = ?", (doc_id,))
+    conn.commit()
+    conn.close()
+
+def save_rag_chunk(doc_id, chunk_index, text, embedding):
+    conn = get_conn()
+    emb_json = json.dumps(embedding)
+    conn.execute(
+        "INSERT INTO rag_chunks (doc_id, chunk_index, text, embedding) VALUES (?, ?, ?, ?)",
+        (doc_id, chunk_index, text, emb_json),
+    )
+    conn.commit()
+    conn.close()
+
+def get_all_rag_chunks():
+    conn = get_conn()
+    rows = conn.execute("SELECT id, doc_id, chunk_index, text, embedding FROM rag_chunks ORDER BY doc_id, chunk_index").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def load_embedding(emb_json):
+    if not emb_json:
+        return None
+    try:
+        return json.loads(emb_json)
+    except:
+        return None

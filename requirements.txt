@@ -4,3 +4,5 @@ flask>=3.0
 flask-cors>=5.0
 yt-dlp>=2026.0
 python-dotenv>=1.0.0
+beautifulsoup4>=4.12
+PyMuPDF>=1.23

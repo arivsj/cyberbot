@@ -777,35 +777,212 @@ async function runSecurityCheck(name) {
 }
 
 let secResultsCache = {};
-async function runAllSecurity() {
-  setSecStatus("⏳ Rodando...", "sending");
-  try {
-    const all = await api.get("/api/security/run");
-    if (all && all.error) throw new Error(all.error);
-    for (const name of SEC_CHECKS) secResultsCache[name] = all[name] || null;
-  } catch (e) {
-    console.error("[sec] ERRO:", e);
-    for (const name of SEC_CHECKS) secResultsCache[name] = null;
+
+// ─── Security Scanner (Matrix Hackerman) ──────────────
+
+class SecurityScanner {
+  constructor() {
+    this.canvas = document.getElementById("secMatrixCanvas");
+    this.overlay = document.getElementById("secScannerOverlay");
+    this.progressEl = document.getElementById("secScannerProgress");
+    this.checkEl = document.getElementById("secScannerCheck");
+    this.fillEl = document.getElementById("secScannerFill");
+    this.ctx = this.canvas?.getContext("2d");
+    this.drops = [];
+    this.columns = 0;
+    this.animId = null;
+    this.fontSize = 14;
+    this.running = false;
+    this.chars = "ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵﾘｱﾎﾃﾏｹﾒｴｶｷﾑﾕﾗｾﾈｽﾀﾇﾍｦｲｸｺｿﾁﾄﾉﾌﾔﾖﾙﾚﾛﾝ0123456789";
   }
+
+  _resize() {
+    if (!this.canvas) return;
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    this.canvas.width = rect.width;
+    this.canvas.height = rect.height;
+    this.columns = Math.floor(this.canvas.width / this.fontSize);
+    this.drops = Array(this.columns).fill(1);
+  }
+
+  _draw() {
+    if (!this.ctx) return;
+    this.ctx.fillStyle = "rgba(0,0,0,0.05)";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.font = `${this.fontSize}px monospace`;
+    for (let i = 0; i < this.drops.length; i++) {
+      const char = this.chars[Math.floor(Math.random() * this.chars.length)];
+      const x = i * this.fontSize;
+      const y = this.drops[i] * this.fontSize;
+      const head = Math.random() > 0.92;
+      this.ctx.fillStyle = head ? "#ffffff" : "#00ff41";
+      this.ctx.fillText(char, x, y);
+      if (y > this.canvas.height && Math.random() > 0.975) this.drops[i] = 0;
+      this.drops[i]++;
+    }
+  }
+
+  _loop() {
+    if (!this.running) return;
+    this._draw();
+    this.animId = requestAnimationFrame(() => this._loop());
+  }
+
+  show() {
+    if (!this.overlay) return;
+    this.overlay.classList.add("active");
+    this.running = true;
+    this._resize();
+    this._loop();
+  }
+
+  hide() {
+    this.running = false;
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    if (this.overlay) this.overlay.classList.remove("active");
+  }
+
+  setProgress(current, total, label) {
+    if (this.progressEl) this.progressEl.textContent = `${current} / ${total}`;
+    if (this.checkEl) this.checkEl.textContent = label;
+    if (this.fillEl) this.fillEl.style.width = `${(current / total) * 100}%`;
+  }
+}
+
+const SEC_SCAN_MSGS = {
+  connections: "Rastreando conexões externas em busca de túneis suspeitos...",
+  ssh: "Examinando tentativas de invasão por força bruta no SSH...",
+  integrity: "Comparando hashes de binários críticos do sistema...",
+  persistence: "Escaneando cron jobs e timers para backdoors ocultos...",
+  processes: "Analisando processos em execução por anomalias...",
+  ports: "Mapeando portas abertas para identificar serviços vulneráveis...",
+  firewall: "Verificando regras do firewall contra explorações conhecidas...",
+  fail2ban: "Checando logs do fail2ban por padrões de ataque...",
+  sudo: "Auditando privilégios sudo e acessos não autorizados...",
+  updates: "Verificando pacotes com falhas de segurança conhecidas...",
+  services: "Inspecionando serviços systemd com comportamento anômalo...",
+  users: "Varrendo contas de usuário por backdoors e acessos ocultos...",
+};
+
+const secScanner = new SecurityScanner();
+
+async function runAllSecurity() {
+  setSecStatus("⏳ Escaneando...", "sending");
+  secResultsCache = {};
+
+  const all = await api.get("/api/security/run");
+  if (all && all.error) {
+    setSecStatus("❌ Erro", "error");
+    return;
+  }
+  for (const name of SEC_CHECKS) secResultsCache[name] = all[name] || null;
+
+  secScanner.show();
+  secScanner.setProgress(0, SEC_CHECKS.length, "INICIALIZANDO...");
+
+  const grid = document.getElementById("secResults");
+  grid.innerHTML = `<div class="sec-overview"><div class="sec-risk-badge risk-low" style="opacity:0.4">⏳ Escaneando 12 verificações...</div></div>`;
+
+  for (let i = 0; i < SEC_CHECKS.length; i++) {
+    const name = SEC_CHECKS[i];
+    const label = SEC_LABELS[name] || name;
+    secScanner.setProgress(i + 1, SEC_CHECKS.length, label.toUpperCase());
+
+    const scanMsg = SEC_SCAN_MSGS[name] || "Analisando...";
+    const cardHtml = renderSingleCard(name, null, true, scanMsg);
+    const container = document.createElement("div");
+    container.innerHTML = cardHtml;
+    grid.appendChild(container.firstElementChild);
+
+    const delay = 400 + Math.random() * 600;
+    await new Promise(r => setTimeout(r, delay));
+
+    const updatedCard = renderSingleCard(name, secResultsCache[name]);
+    const existing = document.querySelector(`[data-check="${name}"]`);
+    if (existing) existing.outerHTML = updatedCard;
+  }
+
+  secScanner.hide();
   renderSecurityResults(secResultsCache);
   setSecStatus("✅ Completo", "sent");
+}
+
+function renderSingleCard(name, result, scanning, scanMsg) {
+  const label = SEC_LABELS[name] || name;
+  const m = result?.meta || {};
+
+  if (scanning) {
+    return `<div class="sec-card sec-scanning" data-check="${name}">
+      <div class="sec-card-header">
+        <span class="sec-icon">⏳</span>
+        <span class="sec-title">${label}</span>
+        <span class="sec-risk-label" style="color:var(--neon3);border-color:var(--neon3)">ESCANEANDO</span>
+        <span class="sec-badge" style="background:rgba(0,255,247,0.15);color:var(--neon);border:1px solid var(--neon)">~</span>
+        <button class="sec-run-btn" disabled>⋯</button>
+      </div>
+      <div class="sec-card-meta"><span class="sec-cmd">$ scanning...</span></div>
+      <div class="sec-card-desc">${scanMsg}</div>
+      <div class="sec-card-body"><div class="sec-scanner-spinner"></div></div>
+    </div>`;
+  }
+
+  function cardStatus(r) {
+    if (!r) return { icon: "⚠️", label: "🟢 OK", badge: "erro", badgeCls: "badge-ok" };
+    const s = r.status;
+    if (s === "alerta") return { icon: "🔴", label: "🔴 Risco", badge: (r.alerts?.length || 0), badgeCls: "badge-alert" };
+    if (s === "atencao") return { icon: "🟡", label: "🟡 Atenção", badge: (r.attentions?.length || 0), badgeCls: "badge-alert" };
+    return { icon: "🟢", label: "🟢 OK", badge: "OK", badgeCls: "badge-ok" };
+  }
+
+  const st = cardStatus(result);
+  const cls = result?.status === "alerta" ? "sec-alert" : "sec-ok";
+  return `<div class="sec-card ${cls}" data-check="${name}">
+    <div class="sec-card-header">
+      <span class="sec-icon">${st.icon}</span>
+      <span class="sec-title">${label}</span>
+      <span class="sec-risk-label">${st.label}</span>
+      <span class="sec-badge ${st.badgeCls}">${st.badge}</span>
+      <button class="sec-run-btn" data-check="${name}">▶</button>
+    </div>
+    <div class="sec-card-meta"><span class="sec-cmd">$ ${m.cmd || ""}</span></div>
+    <div class="sec-card-desc">${m.desc || ""}</div>
+    ${result?.status === "alerta" ? `<div class="sec-card-risk">⚠️ Risco: ${m.risk || ""}</div>` : ""}
+    <div class="sec-card-body">${renderCheckBody(name, result)}</div>
+  </div>`;
+}
+
+function bindSecRunButtons() {
+  document.querySelectorAll(".sec-run-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const name = btn.dataset.check;
+      setSecStatus(`⏳ Rodando ${SEC_LABELS[name]}...`, "sending");
+      try {
+        const all = await api.get("/api/security/run");
+        if (all && all.error) throw new Error(all.error);
+        for (const n of SEC_CHECKS) secResultsCache[n] = all[n] || null;
+      } catch (e) {
+        console.error("[sec] ERRO individual:", e);
+        secResultsCache[name] = null;
+      }
+      renderSecurityResults(secResultsCache);
+      setSecStatus("✅ OK", "sent");
+    });
+  });
 }
 
 function renderSecurityResults(results) {
   const grid = document.getElementById("secResults");
   const meta = results[SEC_CHECKS[0]]?.meta || {};
-  let html = '<div class="sec-overview">';
+  let html = '';
   let totalAlerts = 0, totalAtten = 0;
   for (const name of SEC_CHECKS) {
     const r = results[name];
     if (r?.alerts?.length) totalAlerts += r.alerts.length;
     if (r?.attentions?.length) totalAtten += r.attentions.length;
   }
-  let riskText = "🟢 Nenhum risco";
-  if (totalAlerts > 0) riskText = `🔴 ${totalAlerts} risco(s) detectado(s)`;
-  else if (totalAtten > 0) riskText = `🟡 ${totalAtten} atenção(ões)`;
-  html += `<div class="sec-risk-badge ${totalAlerts > 0 ? "risk-high" : totalAtten > 0 ? "risk-atten" : "risk-low"}">${riskText}</div>`;
-  html += '</div>';
 
   // Chart
   html += '<div class="sec-chart-wrap"><div class="sec-chart" id="secChart">';
@@ -815,7 +992,11 @@ function renderSecurityResults(results) {
     const max = Math.max(...SEC_CHECKS.map(n => results[n]?.alerts?.length || 0), 1);
     html += `<div class="sec-chart-item"><div class="sec-chart-label">${SEC_LABELS[name].split(" ")[0]}</div><div class="sec-chart-bar"><div class="sec-chart-fill ${count > 0 ? "chart-alert" : "chart-ok"}" style="width:${(count / max) * 100}%"></div></div><div class="sec-chart-val">${count}</div></div>`;
   }
-  html += '</div></div>';
+  html += '</div>';
+  if (totalAlerts > 0) {
+    html += `<div class="sec-chart-total">🔥 Total: <strong>${totalAlerts}</strong> risco(s)</div>`;
+  }
+  html += '</div>';
 
   function cardStatus(r) {
     if (!r) return { cls: "sec-ok", icon: "⚠️", label: "🟢 OK", badge: "erro", badgeCls: "badge-ok" };
@@ -845,23 +1026,7 @@ function renderSecurityResults(results) {
     </div>`;
   }
   grid.innerHTML = html;
-
-  grid.querySelectorAll(".sec-run-btn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const name = btn.dataset.check;
-      setSecStatus(`⏳ Rodando ${SEC_LABELS[name]}...`, "sending");
-      try {
-        const all = await api.get("/api/security/run");
-        if (all && all.error) throw new Error(all.error);
-        for (const n of SEC_CHECKS) secResultsCache[n] = all[n] || null;
-      } catch (e) {
-        console.error("[sec] ERRO individual:", e);
-        secResultsCache[name] = null;
-      }
-      renderSecurityResults(secResultsCache);
-      setSecStatus("✅ OK", "sent");
-    });
-  });
+  bindSecRunButtons();
 }
 
 function renderCheckBody(name, r) {
@@ -1057,13 +1222,99 @@ document.querySelector('nav a[data-module="drive"]')?.addEventListener("click", 
   setTimeout(() => loadDrive(currentDriveFolder), 50);
 });
 
+// ─── Matrix Rain ───────────────────────────────────────
+
+class MatrixRain {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.drops = [];
+    this.columns = 0;
+    this.animId = null;
+    this.fontSize = 12;
+    this.color = "#00ff41";
+    this.chars = "ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵﾘｱﾎﾃﾏｹﾒｴｶｷﾑﾕﾗｾﾈｽﾀﾇﾍｦｲｸｺｿﾁﾄﾉﾌﾔﾖﾙﾚﾛﾝ0123456789";
+    this.frame = 0;
+    this.speed = 3;
+
+    this._resize();
+    this._loop();
+    window.addEventListener("resize", () => this._resize());
+  }
+
+  _resize() {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    this.canvas.width = rect.width;
+    this.canvas.height = rect.height;
+    this.columns = Math.floor(this.canvas.width / this.fontSize);
+    this.drops = Array(this.columns).fill(1);
+  }
+
+  setColor(c) {
+    this.color = c;
+  }
+
+  _draw() {
+    this.ctx.fillStyle = "rgba(0,0,0,0.03)";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.ctx.font = `${this.fontSize}px monospace`;
+
+    for (let i = 0; i < this.drops.length; i++) {
+      const char = this.chars[Math.floor(Math.random() * this.chars.length)];
+      const x = i * this.fontSize;
+      const y = this.drops[i] * this.fontSize;
+
+      const head = Math.random() > 0.92;
+      this.ctx.fillStyle = head ? "#ffffff" : this.color;
+      this.ctx.fillText(char, x, y);
+
+      if (y > this.canvas.height && Math.random() > 0.975) {
+        this.drops[i] = 0;
+      }
+    }
+  }
+
+  _update() {
+    this.frame++;
+    if (this.frame % this.speed !== 0) return;
+    for (let i = 0; i < this.drops.length; i++) {
+      this.drops[i]++;
+    }
+  }
+
+  _loop() {
+    this._update();
+    this._draw();
+    this.animId = requestAnimationFrame(() => this._loop());
+  }
+}
+
 // ─── Sysmon ───────────────────────────────────────────
+
+const matrixRain = new MatrixRain(document.getElementById("matrixCanvas"));
 
 function sysmonColor(val, max, isTemp) {
   const pct = isTemp ? (val / max) : (val / max);
   if (pct < 0.5) return "#00fff7";
   if (pct < 0.75) return "#ff6b00";
   return "#ff0044";
+}
+
+let lastRainColor = "#00ff41";
+
+function setRainByStatus(cpuPct, tempC, ramPct, gpuPct, gpuTemp) {
+  const isRed =
+    sysmonColor(cpuPct, 100, false) === "#ff0044" ||
+    sysmonColor(tempC, 80, true) === "#ff0044" ||
+    sysmonColor(ramPct, 100, false) === "#ff0044" ||
+    sysmonColor(gpuPct, 100, false) === "#ff0044" ||
+    sysmonColor(gpuTemp, 80, true) === "#ff0044";
+  const target = isRed ? "#ff0044" : "#00ff41";
+  if (target !== lastRainColor) {
+    lastRainColor = target;
+    matrixRain.setColor(target);
+  }
 }
 
 async function loadSysmon() {
@@ -1104,11 +1355,13 @@ async function loadSysmon() {
       gpuRow.style.display = "none";
       vramRow.style.display = "none";
     }
+
+    setRainByStatus(cpu, temp, ramPct, gpuPct, gpuTemp);
   } catch (_) {}
 }
 
 document.getElementById("sysmonCard")?.addEventListener("click", loadSysmon);
-setInterval(loadSysmon, 600000);
+setInterval(loadSysmon, 10000);
 setInterval(loadStatus, 5000);
 setInterval(loadDashboard, 10000);
 setInterval(loadFinancas, 10000);
@@ -1273,6 +1526,132 @@ document.getElementById("clAll")?.addEventListener("click", async () => {
   }
 });
 
+// ─── RAG ───────────────────────────────────────────────
+
+let ragDocs = [];
+
+async function loadRag() {
+  try {
+    const docs = await api.get("/api/rag/documents");
+    ragDocs = docs;
+    const list = document.getElementById("ragDocList");
+    if (!docs.length) {
+      list.innerHTML = '<p class="empty">Nenhum documento indexado. Envie PDF/TXT no Telegram com legenda /rag</p>';
+    } else {
+      list.innerHTML = docs.map(d =>
+        `<div class="rag-doc-item">
+          <span class="rag-doc-name">📄 ${d.name}</span>
+          <span class="rag-doc-meta">${d.chunks || 0} chunks</span>
+          <button class="btn-start btn-stop" style="font-size:10px;padding:2px 8px" data-doc-id="${d.id}">✕</button>
+        </div>`
+      ).join("");
+      list.querySelectorAll("[data-doc-id]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          await api.post(`/api/rag/delete/${btn.dataset.docId}`, {});
+          loadRag();
+        });
+      });
+    }
+    document.getElementById("ragStatus").textContent = `📄 ${docs.length} documento(s)`;
+    document.getElementById("ragStatus").className = "sec-status sent";
+  } catch (_) {
+    document.getElementById("ragDocList").innerHTML = '<p class="error">Erro ao carregar</p>';
+  }
+}
+
+document.querySelector('nav a[data-module="rag"]')?.addEventListener("click", () => {
+  setTimeout(loadRag, 50);
+});
+
+document.getElementById("ragQuery")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("ragQueryBtn").click();
+});
+document.getElementById("wsQuery")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("wsSearchBtn").click();
+});
+
+document.getElementById("ragQueryBtn")?.addEventListener("click", async () => {
+  const q = document.getElementById("ragQuery").value.trim();
+  if (!q) return;
+  const answer = document.getElementById("ragAnswer");
+  answer.classList.remove("hidden");
+  answer.innerHTML = '<p class="loading">📚 Consultando documentos...</p>';
+  try {
+    const res = await api.post("/api/rag/chat", { question: q });
+    answer.innerHTML = `<div class="report-ia-text" style="max-height:none">${(res.reply || "Sem resposta").replace(/\n/g, "<br>")}</div>`;
+    if (res.sources?.length) {
+      answer.innerHTML += `<div style="margin-top:8px;font-size:11px;color:var(--text-dim)">📚 Fontes: ${res.sources.join(", ")}</div>`;
+    }
+  } catch (_) {
+    answer.innerHTML = '<p class="error">Erro na consulta</p>';
+  }
+});
+
+// ─── Web Search ────────────────────────────────────────
+
+async function loadWebSearch() {
+  document.getElementById("wsStatus").textContent = "🌐 Pronto para buscar";
+  document.getElementById("wsStatus").className = "sec-status sent";
+}
+
+document.querySelector('nav a[data-module="websearch"]')?.addEventListener("click", () => {
+  setTimeout(loadWebSearch, 50);
+});
+
+document.getElementById("wsSearchBtn")?.addEventListener("click", async () => {
+  const q = document.getElementById("wsQuery").value.trim();
+  if (!q) return;
+  const results = document.getElementById("wsResults");
+  results.classList.remove("hidden");
+  results.innerHTML = '<p class="loading">🔍 Buscando na web...</p>';
+  document.getElementById("wsStatus").textContent = "🔍 Buscando...";
+  document.getElementById("wsStatus").className = "sec-status sending";
+  try {
+    const res = await api.post("/api/websearch/chat", { query: q });
+    results.innerHTML = `<div class="report-ia-text" style="max-height:none">${(res.reply || "Sem resposta").replace(/\n/g, "<br>")}</div>`;
+    if (res.sources?.length) {
+      results.innerHTML += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--text-dim)">
+        <strong>🔗 Fontes:</strong><br>
+        ${res.sources.map(s => `<a href="${s}" target="_blank" style="color:var(--neon)">${s}</a>`).join("<br>")}
+      </div>`;
+    }
+    document.getElementById("wsStatus").textContent = "✅ Completo";
+    document.getElementById("wsStatus").className = "sec-status sent";
+  } catch (_) {
+    results.innerHTML = '<p class="error">Erro na busca</p>';
+    document.getElementById("wsStatus").textContent = "❌ Erro";
+    document.getElementById("wsStatus").className = "sec-status error";
+  }
+});
+
+// ─── Plugins ───────────────────────────────────────────
+
+async function loadPlugins() {
+  try {
+    const list = await api.get("/api/plugins");
+    const container = document.getElementById("pluginList");
+    if (!list.length) {
+      container.innerHTML = '<p class="empty">Nenhum plugin instalado. Crie um arquivo .py em plugins/</p>';
+    } else {
+      container.innerHTML = list.map(p =>
+        `<div class="rag-doc-item">
+          <span class="rag-doc-name">🧩 ${p.name}</span>
+          <span class="rag-doc-meta">${p.description || "Sem descrição"}</span>
+          <span style="font-size:10px;color:var(--text-dim)">${(p.commands || []).join(", ")}</span>
+        </div>`
+      ).join("");
+    }
+    document.getElementById("plStatus").textContent = `🧩 ${list.length} plugin(s)`;
+    document.getElementById("plStatus").className = "sec-status sent";
+  } catch (_) {
+    document.getElementById("pluginList").innerHTML = '<p class="error">Erro ao carregar</p>';
+  }
+}
+
+document.querySelector('nav a[data-module="plugins"]')?.addEventListener("click", () => {
+  setTimeout(loadPlugins, 50);
+});
+
 // ─── End Cleanup ──────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1280,5 +1659,4 @@ document.addEventListener("DOMContentLoaded", () => {
   loadFinancas();
   loadSysmon();
   updateSecBadge();
-  document.getElementById("statusCache").textContent = "A cada 30 min (automático)";
 });

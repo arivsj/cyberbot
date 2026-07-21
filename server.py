@@ -13,6 +13,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import db
 import ollama_utils
+import rag
+from plugin_loader import load_plugins, plugins, get_plugins_list
 
 app = Flask(__name__)
 CORS(app)
@@ -588,6 +590,145 @@ def cleanup_set_sudo():
 def cleanup_sudo_status():
     return jsonify({"has_password": bool(cleanup.SUDO_PASSWORD)})
 
+# ─── RAG ────────────────────────────────────────────────
+
+@app.route("/api/rag/documents")
+def rag_list_documents():
+    docs = db.list_rag_documents()
+    return jsonify(docs)
+
+@app.route("/api/rag/upload", methods=["POST"])
+def rag_upload():
+    if "file" not in request.files:
+        return jsonify({"error": "no file"}), 400
+    f = request.files["file"]
+    name = f.filename or "documento"
+    path = os.path.join(os.path.dirname(__file__), "drive_files", name)
+    f.save(path)
+    ok = rag.index_file(path, name)
+    if ok:
+        return jsonify({"status": "ok", "name": name})
+    return jsonify({"error": "indexação falhou"}), 500
+
+@app.route("/api/rag/query", methods=["POST"])
+def rag_query():
+    data = request.get_json() or {}
+    question = data.get("question", "")
+    if not question:
+        return jsonify({"error": "questão vazia"}), 400
+    context, sources = rag.query_with_context(question)
+    return jsonify({"context": context, "sources": sources})
+
+@app.route("/api/rag/chat", methods=["POST"])
+def rag_chat():
+    data = request.get_json() or {}
+    question = data.get("question", "")
+    if not question:
+        return jsonify({"error": "questão vazia"}), 400
+    context, sources = rag.query_with_context(question)
+    if not context:
+        return jsonify({"reply": "Nenhum documento relevante encontrado.", "sources": []})
+    prompt = (
+        "Você é um assistente. Use o contexto abaixo para responder. "
+        "Se não houver informação suficiente, diga que não sabe. "
+        "Sempre mencione as fontes.\n\n"
+        f"Contexto:\n{context}\n\n"
+        f"Pergunta: {question}\nResposta:"
+    )
+    try:
+        r = httpx.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": MODELO_PADRAO,
+                "messages": [{"role": "user", "content": prompt}],
+                "options": ollama_utils.get_chat_options(MODELO_PADRAO),
+                "stream": False,
+            },
+            timeout=60,
+        )
+        reply = r.json().get("message", {}).get("content", "Erro na resposta.") if r.status_code == 200 else "IA indisponível"
+    except Exception as e:
+        reply = f"Erro: {e}"
+    return jsonify({"reply": reply, "sources": sources})
+
+@app.route("/api/rag/delete/<int:doc_id>", methods=["POST"])
+def rag_delete(doc_id):
+    db.delete_rag_document(doc_id)
+    return jsonify({"status": "ok"})
+
+# ─── Web Search ─────────────────────────────────────────
+
+import websearch
+
+@app.route("/api/websearch/search", methods=["POST"])
+def web_search():
+    data = request.get_json() or {}
+    query = data.get("query", "")
+    if not query:
+        return jsonify({"error": "query vazia"}), 400
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    context, sources = loop.run_until_complete(websearch.search_and_prepare(query))
+    loop.close()
+    return jsonify({"context": context, "sources": sources})
+
+@app.route("/api/websearch/chat", methods=["POST"])
+def web_search_chat():
+    data = request.get_json() or {}
+    query = data.get("query", "")
+    if not query:
+        return jsonify({"error": "query vazia"}), 400
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    context, sources = loop.run_until_complete(websearch.search_and_prepare(query))
+    loop.close()
+    if not context:
+        return jsonify({"reply": "Não consegui buscar informações sobre isso.", "sources": []})
+    prompt = (
+        "Você é um assistente. Use o contexto abaixo para responder. "
+        "Se não souber, diga que não sabe. Cite as fontes numeradas.\n\n"
+        f"Contexto:\n{context}\n\n"
+        f"Pergunta: {query}\nResposta:"
+    )
+    try:
+        r = httpx.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": MODELO_PADRAO,
+                "messages": [{"role": "user", "content": prompt}],
+                "options": ollama_utils.get_chat_options(MODELO_PADRAO),
+                "stream": False,
+            },
+            timeout=60,
+        )
+        reply = r.json().get("message", {}).get("content", "Erro na resposta.") if r.status_code == 200 else "IA indisponível"
+    except Exception as e:
+        reply = f"Erro: {e}"
+    return jsonify({"reply": reply, "sources": sources})
+
+# ─── Plugins ────────────────────────────────────────────
+
+@app.route("/api/plugins")
+def list_plugins():
+    return jsonify(get_plugins_list())
+
+@app.route("/api/plugins/create", methods=["POST"])
+def create_plugin_endpoint():
+    data = request.get_json() or {}
+    name = data.get("name", "").strip().lower().replace(" ", "_")
+    code = data.get("code", "")
+    if not name or not code:
+        return jsonify({"error": "name e code são obrigatórios"}), 400
+    if not name.isidentifier():
+        return jsonify({"error": "nome inválido"}), 400
+    from plugin_loader import create_plugin
+    create_plugin(name, code)
+    _kill_bot()
+    _start_bot()
+    return jsonify({"status": "ok", "name": name})
+
 # ─── Periodic cache clear ────────────────────────────────
 
 def periodic_cache_clear():
@@ -598,6 +739,7 @@ def periodic_cache_clear():
 
 if __name__ == "__main__":
     db.init()
+    load_plugins()
     if security:
         try:
             security.init_baseline()
@@ -605,6 +747,14 @@ if __name__ == "__main__":
             print(f"[security] Erro ao iniciar baseline: {e}", file=sys.stderr)
     MODELO_PADRAO = db.get_setting("model", "gemma4")
     ensure_ollama()
+    try:
+        r = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        modelos = [m["name"] for m in r.json().get("models", [])]
+        if not any("nomic-embed-text" in m for m in modelos):
+            print("[rag] Baixando modelo de embedding nomic-embed-text...")
+            subprocess.Popen(["ollama", "pull", "nomic-embed-text"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).wait()
+    except:
+        pass
     _start_bot()
     threading.Timer(7200, periodic_cache_clear).start()
     port = int(os.environ.get("PORT", 5000))
