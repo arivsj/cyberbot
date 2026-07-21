@@ -6,3 +6,6 @@ yt-dlp>=2026.0
 python-dotenv>=1.0.0
 beautifulsoup4>=4.12
 PyMuPDF>=1.23
+google-api-python-client>=2.0
+google-auth-httplib2>=0.1
+google-auth-oauthlib>=1.0
