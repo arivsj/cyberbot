@@ -212,6 +212,7 @@
           <div class="sec-controls" style="margin-bottom:0">
             <button class="btn-start" id="clSafe">✅ Limpeza Segura</button>
             <button class="btn-start btn-stop" id="clAll">⚠️ Limpeza Completa</button>
+            <button class="btn-start" id="clSudoBtn">🔑 Senha sudo</button>
             <span id="clStatus" class="sec-status"></span>
           </div>
         </div>
@@ -262,6 +263,19 @@
       <div id="reportResults"></div>
       <div class="modal-buttons" style="margin-top:12px">
         <button class="btn-start btn-stop" onclick="closeReport()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sudoOverlay" class="modal-overlay hidden" onclick="closeSudo()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-label">🔑 Senha sudo</div>
+      <div class="report-section" style="font-size:12px;color:var(--text);margin-bottom:12px">Digite a senha sudo para permitir as tarefas de limpeza. <strong>Não é salva em disco</strong>, apenas em memória enquanto o servidor estiver rodando.</div>
+      <input type="password" id="sudoPassword" class="modal-input" placeholder="senha sudo..." autocomplete="off">
+      <div id="sudoStatus" class="send-status hidden"></div>
+      <div class="modal-buttons">
+        <button class="btn-start" id="sudoConfirm">🔑 Salvar</button>
+        <button class="btn-start btn-stop" onclick="closeSudo()">Cancelar</button>
       </div>
     </div>
   </div>

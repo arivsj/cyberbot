@@ -561,6 +561,11 @@ import cleanup
 def cleanup_tasks():
     return jsonify([{"id": t["id"], "name": t["name"], "desc": t["desc"], "needs_sudo": t["needs_sudo"], "safe": t["safe"]} for t in cleanup.TASKS])
 
+@app.route("/api/cleanup/preview", methods=["POST"])
+def cleanup_preview():
+    data = request.get_json() or {}
+    return jsonify(cleanup.preview_task(data.get("task", "")))
+
 @app.route("/api/cleanup/run", methods=["POST"])
 def cleanup_run():
     data = request.get_json() or {}
@@ -571,6 +576,17 @@ def cleanup_run():
     if mode == "safe":
         return jsonify(cleanup.run_safe())
     return jsonify(cleanup.run_all())
+
+@app.route("/api/cleanup/sudo-password", methods=["POST"])
+def cleanup_set_sudo():
+    data = request.get_json() or {}
+    pw = data.get("password", "")
+    cleanup.set_password(pw)
+    return jsonify({"status": "ok", "message": "Senha sudo armazenada em memória"})
+
+@app.route("/api/cleanup/sudo-status")
+def cleanup_sudo_status():
+    return jsonify({"has_password": bool(cleanup.SUDO_PASSWORD)})
 
 # ─── Periodic cache clear ────────────────────────────────
 

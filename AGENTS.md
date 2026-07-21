@@ -107,6 +107,13 @@ cd desktop && npm start
 - Commits com mensagens descritivas em português
 - Forçar push só com autorização explícita
 
+## Regra Crítica — Não Alterar Fluxos Existentes
+
+- **NUNCA** modificar, remover ou alterar comportamento de funcionalidades que já funcionam
+- Ao adicionar algo novo, criar novo módulo ou função — não alterar o fluxo existente
+- GPU/VRAM (sysmon.py), chat com IA, upload de arquivos e qualquer outra feature funcional **não deve ser tocada**
+- Se precisar estender algo, adicionar ao lado, nunca substituir
+
 ## Convenções de Código
 
 - **Python**: sem comentários supérfluos, snake_case, type hints quando aplicável

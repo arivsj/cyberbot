@@ -1122,6 +1122,51 @@ function setClStatus(text, cls) {
   el.className = "sec-status " + (cls || "");
 }
 
+// ─── Sudo password modal ─────────────────────────────
+
+async function checkSudo() {
+  try {
+    const s = await api.get("/api/cleanup/sudo-status");
+    document.getElementById("clSudoBtn").textContent = s.has_password ? "🔑 Trocar senha" : "🔑 Senha sudo";
+    return s.has_password;
+  } catch { return false; }
+}
+
+function openSudo() {
+  document.getElementById("sudoPassword").value = "";
+  document.getElementById("sudoStatus").classList.add("hidden");
+  document.getElementById("sudoOverlay").classList.remove("hidden");
+  setTimeout(() => document.getElementById("sudoPassword").focus(), 100);
+}
+
+function closeSudo() {
+  document.getElementById("sudoOverlay").classList.add("hidden");
+}
+
+document.getElementById("sudoConfirm")?.addEventListener("click", async () => {
+  const pw = document.getElementById("sudoPassword").value;
+  if (!pw) return;
+  const status = document.getElementById("sudoStatus");
+  status.className = "send-status sending";
+  status.textContent = "⏳ Salvando...";
+  status.classList.remove("hidden");
+  try {
+    await api.post("/api/cleanup/sudo-password", { password: pw });
+    status.className = "send-status sent";
+    status.textContent = "✅ Senha armazenada em memória";
+    document.getElementById("sudoPassword").value = "";
+    document.getElementById("clSudoBtn").textContent = "🔑 Trocar senha";
+    setTimeout(closeSudo, 1000);
+  } catch {
+    status.className = "send-status error";
+    status.textContent = "❌ Erro ao salvar";
+  }
+});
+
+document.getElementById("sudoPassword")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("sudoConfirm").click();
+});
+
 async function loadCleanup() {
   setClStatus("⏳ Carregando...", "sending");
   try {
@@ -1132,7 +1177,8 @@ async function loadCleanup() {
         <div class="sec-card-header">
           <span class="sec-icon">🧹</span>
           <span class="sec-title">${t.name}</span>
-          <span class="sec-badge badge-ok">${t.safe ? "seguro" : "⚠️"}</span>
+          <span class="sec-badge badge-ok">${t.safe ? "seguro" : "⚠️ PERIGO"}</span>
+          ${t.id === "apt_cache" ? '<button class="sec-run-btn cl-preview-btn" data-task="apt_cache" title="Ver preview">📋</button>' : ""}
           <button class="sec-run-btn cl-run-btn" data-task="${t.id}">▶</button>
         </div>
         <div class="sec-card-meta"><span class="sec-cmd">${t.needs_sudo ? "🔒 sudo" : "👤 user"}</span></div>
@@ -1158,7 +1204,28 @@ async function loadCleanup() {
         }
       });
     });
+
+    grid.querySelectorAll(".cl-preview-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.task;
+        const body = document.getElementById(`clResult_${id}`);
+        body.innerHTML = '<span class="sec-empty">⏳ Obtendo preview...</span>';
+        try {
+          const res = await api.post("/api/cleanup/preview", { task: id });
+          if (res.packages?.length) {
+            body.innerHTML = `<div class="sec-line" style="color:var(--neon3)">📋 Pacotes a remover:</div>` +
+              res.packages.map(p => `<div class="sec-line" style="font-size:11px">${p}</div>`).join("") +
+              `<div class="sec-line" style="margin-top:6px">▶ Clique em ▶ para executar</div>`;
+          } else {
+            body.innerHTML = `<div class="sec-line" style="color:var(--neon)">🟢 ${res.preview || "Nada a remover"}</div>`;
+          }
+        } catch {
+          body.innerHTML = '<div class="sec-line sec-line-alert">❌ Erro ao obter preview</div>';
+        }
+      });
+    });
     setClStatus("✅ Pronto", "sent");
+    checkSudo();
   } catch (_) {
     setClStatus("❌ Erro", "error");
   }
@@ -1167,6 +1234,8 @@ async function loadCleanup() {
 document.querySelector('nav a[data-module="cleanup"]')?.addEventListener("click", () => {
   setTimeout(loadCleanup, 50);
 });
+
+document.getElementById("clSudoBtn")?.addEventListener("click", openSudo);
 
 document.getElementById("clSafe")?.addEventListener("click", async () => {
   setClStatus("⏳ Limpeza segura...", "sending");
