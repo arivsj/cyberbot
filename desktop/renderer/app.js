@@ -385,15 +385,18 @@ async function loadDrive(folderId) {
         html += "</div></div>";
       }
       if (files.length > 0) {
-        html += '<div class="drive-section"><h3>📄 Arquivos</h3><table class="drive-table"><thead><tr><th>Nome</th><th>Tamanho</th><th>Data</th></tr></thead><tbody>';
+        html += '<div class="drive-section"><h3>📄 Arquivos</h3><table class="drive-table"><thead><tr><th>Nome</th><th>Tamanho</th><th>Data</th><th></th></tr></thead><tbody>';
         files.forEach((f) => {
           const sz = f.file_size < 1024 * 1024
             ? `${(f.file_size / 1024).toFixed(1)} KB`
             : `${(f.file_size / (1024 * 1024)).toFixed(1)} MB`;
-          html += `<tr class="drive-file" data-absolute-path="${f.absolute_path || ""}">
+          const isAudio = f.name.endsWith(".wav") || f.name.endsWith(".mp3") || f.name.endsWith(".ogg");
+          const previewBtn = isAudio ? `<button class="btn-start drive-preview-btn" data-path="${f.absolute_path || ""}" data-name="${f.name}" style="font-size:10px;padding:2px 8px">▶</button>` : "";
+          html += `<tr class="drive-file${isAudio ? " drive-audio" : ""}" data-absolute-path="${f.absolute_path || ""}">
             <td class="drive-name">📄 ${f.name}</td>
             <td>${sz}</td>
             <td>${brDate(f.created_at)}</td>
+            <td>${previewBtn}</td>
           </tr>`;
         });
         html += "</tbody></table></div>";
@@ -409,9 +412,33 @@ async function loadDrive(folderId) {
 
     // File click handlers — open folder in file manager
     container.querySelectorAll(".drive-file").forEach((el) => {
-      el.addEventListener("click", () => {
+      el.addEventListener("click", (e) => {
+        if (e.target.closest(".drive-preview-btn")) return;
         const p = el.dataset.absolutePath;
         if (p) api.showItemInFolder(p);
+      });
+    });
+
+    // Audio preview
+    container.querySelectorAll(".drive-preview-btn").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const path = btn.dataset.path;
+        if (!path) return;
+        const row = btn.closest("tr");
+        const existing = row.querySelector(".drive-player");
+        if (existing) { existing.remove(); return; }
+        try {
+          const dataUrl = await api.readFile(path);
+          if (!dataUrl) return;
+          const td = document.createElement("td");
+          td.colSpan = 4;
+          td.className = "drive-player";
+          td.innerHTML = `<audio controls style="width:100%" src="${dataUrl}"></audio>`;
+          const tr = document.createElement("tr");
+          tr.appendChild(td);
+          row.parentNode.insertBefore(tr, row.nextSibling);
+        } catch (_) {}
       });
     });
 

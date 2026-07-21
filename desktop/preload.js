@@ -20,4 +20,7 @@ contextBridge.exposeInMainWorld("api", {
   showItemInFolder(filePath) {
     ipcRenderer.invoke("show-item-in-folder", filePath);
   },
+  readFile(filePath) {
+    return ipcRenderer.invoke("read-file", filePath);
+  },
 });

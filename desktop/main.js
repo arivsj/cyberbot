@@ -59,6 +59,17 @@ ipcMain.handle("show-item-in-folder", (_event, filePath) => {
   shell.showItemInFolder(filePath);
 });
 
+ipcMain.handle("read-file", (_event, filePath) => {
+  try {
+    const data = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = ext === ".wav" ? "audio/wav" : ext === ".mp3" ? "audio/mpeg" : ext === ".ogg" ? "audio/ogg" : "application/octet-stream";
+    return `data:${mime};base64,${data.toString("base64")}`;
+  } catch {
+    return null;
+  }
+});
+
 function clearCache() {
   const data = JSON.stringify({});
   const req = http.request({

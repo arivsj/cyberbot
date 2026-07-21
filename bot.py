@@ -575,6 +575,17 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await thinking.delete()
     await send_with_code_blocks(update, reply)
 
+    try:
+        from plugins.leia import LeiaPlugin, limpar_texto
+        import io
+        leia = LeiaPlugin()
+        onnx = leia.ensure_voice()
+        if onnx and os.path.exists(onnx) and "não" not in str(onnx):
+            wav = leia.text_to_wav(limpar_texto(reply), onnx)
+            await update.message.reply_voice(io.BytesIO(wav.read()))
+    except:
+        pass
+
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _check_whitelist(update):
         await update.message.reply_text("❌ Acesso negado.")
@@ -622,6 +633,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["history"].append({"role": "assistant", "content": reply})
     await thinking.delete()
     await send_with_code_blocks(update, reply)
+    try:
+        await update.message.reply_photo(photo_bytes, caption=reply[:200])
+    except:
+        pass
+
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _check_whitelist(update):
+        return
+    _log_update(update, "video")
+    video = update.message.video
+    caption = update.message.caption or "🎬 Vídeo recebido"
+    await update.message.reply_video(video.file_id, caption=caption)
 
 def split_code_blocks(text):
     segments = []
@@ -2005,6 +2028,7 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.VIDEO, handle_video))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     import plugin_loader
