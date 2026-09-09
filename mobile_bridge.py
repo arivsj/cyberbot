@@ -1,4 +1,5 @@
 import argparse
+import base64
 import io
 import json
 import os
@@ -174,6 +175,26 @@ def _context_info(model: str) -> Optional[Dict[str, Any]]:
         return ollama_utils.get_context_info(model)
     except Exception:
         return None
+
+
+def _resolve_model(requested: Optional[str]) -> str:
+    """Devolve um modelo que existe no Ollama (evita 404 por nome sem tag)."""
+    configured = _model()
+    if not requested:
+        return configured
+    requested = str(requested).strip()
+    try:
+        response = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        names = [m["name"] for m in response.json().get("models", [])] if response.status_code == 200 else []
+    except Exception:
+        return requested
+    if not names:
+        return requested
+    if requested in names:
+        return requested
+    if configured in names:
+        return configured
+    return names[0]
 
 
 def _flat_sysmon() -> Dict[str, Any]:
@@ -427,7 +448,7 @@ def chat():
     if not message:
         return _error("BAD_REQUEST", "message é obrigatório.")
     cid = str(data.get("conversation_id") or uuid.uuid4().hex)
-    model = str(data.get("model") or _model())
+    model = _resolve_model(data.get("model"))
     key = _idempotency_key()
     cached = auth.idempotency_get(key)
     if cached is not None:
@@ -435,6 +456,19 @@ def chat():
     if not _ollama_running():
         return _error("UPSTREAM_TIMEOUT", "Ollama não está rodando.", 504)
     history = _conversation(cid)
+    seed = data.get("history")
+    if isinstance(seed, list) and seed and not history:
+        for item in seed[-40:]:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role", "")).strip().lower()
+            content = str(item.get("content", "")).strip()
+            if not content:
+                continue
+            if role in ("cyberbot", "assistant", "bot"):
+                history.append({"role": "assistant", "content": content})
+            elif role in ("você", "voce", "user"):
+                history.append({"role": "user", "content": content})
     history.append({"role": "user", "content": message})
     started = time.time()
     try:
@@ -462,7 +496,7 @@ def chat_stream():
     if not message:
         return _error("BAD_REQUEST", "message é obrigatório.")
     cid = str(data.get("conversation_id") or uuid.uuid4().hex)
-    model = str(data.get("model") or _model())
+    model = _resolve_model(data.get("model"))
     history = _conversation(cid)
     history.append({"role": "user", "content": message})
 
@@ -814,6 +848,202 @@ def cleanup_run():
     if data.get("mode") == "safe":
         return jsonify(cleanup.run_safe())
     return _error("BAD_REQUEST", "Informe task ou mode=safe (run_all não é permitido pelo app).")
+
+
+# ─── Mídia (imagem, vídeo, arquivo, áudio) ───────────────
+
+TTS_MAX_CHARS = 600
+
+
+def _store_in_drive(name: str, data: bytes, mime: str, folder_name: Optional[str], caption: str = "") -> int:
+    folder_id = None
+    if folder_name:
+        folder_id = next((f["id"] for f in db.listar_pastas() if f["name"] == folder_name), None)
+        if folder_id is None:
+            folder_id = db.criar_pasta(folder_name)
+    fid = db.inserir_arquivo(name=name, folder_id=folder_id, file_path="", file_size=len(data),
+                             mime_type=mime, caption=caption)
+    os.makedirs(DRIVE_DIR, exist_ok=True)
+    path = os.path.join(DRIVE_DIR, f"{fid}_{name}")
+    with open(path, "wb") as handle:
+        handle.write(data)
+    db.update_arquivo_path(fid, path)
+    return fid
+
+
+def _ollama_vision(prompt: str, images_b64: List[str], model: str) -> str:
+    response = httpx.post(f"{OLLAMA_URL}/api/chat", json={
+        "model": model,
+        "messages": [{"role": "user", "content": prompt, "images": images_b64}],
+        "options": ollama_utils.get_chat_options(model),
+        "stream": False,
+    }, timeout=CHAT_TIMEOUT)
+    response.raise_for_status()
+    return response.json().get("message", {}).get("content", "")
+
+
+def _tts_mp3(text: str) -> Optional[bytes]:
+    """Texto -> MP3 com Piper (mesma voz do Telegram). None se indisponível."""
+    try:
+        from plugins.leia import LeiaPlugin, limpar_texto
+        leia = LeiaPlugin()
+        onnx = leia.ensure_voice()
+        if not onnx or "não" in str(onnx) or "Erro" in str(onnx):
+            return None
+        clean = limpar_texto(text)[:TTS_MAX_CHARS].strip()
+        if not clean:
+            return None
+        wav_stream = leia.text_to_wav(clean, onnx)
+        tmp_wav = os.path.join(DRIVE_DIR, f"__tts_{secrets.token_hex(4)}.wav")
+        tmp_mp3 = tmp_wav[:-4] + ".mp3"
+        os.makedirs(DRIVE_DIR, exist_ok=True)
+        with open(tmp_wav, "wb") as handle:
+            handle.write(wav_stream.read())
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", tmp_wav,
+                        "-c:a", "libmp3lame", "-b:a", "48k", tmp_mp3], timeout=120, check=True)
+        with open(tmp_mp3, "rb") as handle:
+            data = handle.read()
+        os.remove(tmp_wav)
+        os.remove(tmp_mp3)
+        return data
+    except Exception as exc:
+        print(f"[media] TTS falhou: {exc}", file=sys.stderr)
+        return None
+
+
+def _media_upload() -> Optional[Any]:
+    if "file" not in request.files:
+        return None
+    upload = request.files["file"]
+    return upload if upload.filename else None
+
+
+@bp.post("/media/image")
+def media_image():
+    upload = _media_upload()
+    if upload is None:
+        return _error("BAD_REQUEST", "Imagem ausente (campo 'file').")
+    caption = str(request.form.get("caption") or "Descreva esta imagem.")
+    data = upload.read(MAX_UPLOAD_MB * 1024 * 1024)
+    if not _ollama_running():
+        return _error("UPSTREAM_TIMEOUT", "Ollama não está rodando.", 504)
+    model = _resolve_model(request.form.get("model"))
+    try:
+        reply = _ollama_vision(caption, [base64.b64encode(data).decode()], model)
+    except Exception as exc:
+        return _error("UPSTREAM_TIMEOUT", f"Falha ao analisar a imagem: {exc}", 504)
+    return jsonify({"reply": reply, "model": model})
+
+
+@bp.post("/media/video")
+def media_video():
+    upload = _media_upload()
+    if upload is None:
+        return _error("BAD_REQUEST", "Vídeo ausente (campo 'file').")
+    data = upload.read(MAX_UPLOAD_MB * 1024 * 1024)
+    name = _safe_name(upload.filename)
+    fid = _store_in_drive(name, data, upload.mimetype or "video/mp4", "Videos", caption="via app")
+    return jsonify({"file_id": fid, "name": name, "size": len(data)})
+
+
+DOC_MAX_CHARS = 12000
+
+
+def _extract_document_text(name: str, data: bytes) -> Dict[str, Any]:
+    lower = name.lower()
+    if lower.endswith(".pdf"):
+        try:
+            import fitz
+        except ImportError:
+            return {"ok": False, "message": "PyMuPDF não instalado no PC (pip install PyMuPDF)."}
+        tmp = os.path.join(DRIVE_DIR, f"__doc_{secrets.token_hex(4)}.pdf")
+        os.makedirs(DRIVE_DIR, exist_ok=True)
+        with open(tmp, "wb") as handle:
+            handle.write(data)
+        try:
+            doc = fitz.open(tmp)
+            text = "\n".join(page.get_text() for page in doc)
+            pages = doc.page_count
+            doc.close()
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+    elif lower.endswith((".txt", ".md", ".csv", ".json", ".py", ".js", ".html", ".xml", ".log")):
+        text = data.decode("utf-8", errors="replace")
+        pages = 1
+    else:
+        return {"ok": False, "message": "Formato não suportado para leitura (envie PDF ou texto)."}
+    clean = text.strip()
+    if not clean:
+        return {"ok": False, "message": "Não há texto extraível (PDF pode ser digitalizado; use o RAG com OCR)."}
+    truncated = len(clean) > DOC_MAX_CHARS
+    return {"ok": True, "text": clean[:DOC_MAX_CHARS], "chars": len(clean), "pages": pages,
+            "truncated": truncated}
+
+
+@bp.post("/media/document")
+def media_document():
+    upload = _media_upload()
+    if upload is None:
+        return _error("BAD_REQUEST", "Documento ausente (campo 'file').")
+    data = upload.read(MAX_UPLOAD_MB * 1024 * 1024)
+    name = _safe_name(upload.filename)
+    extracted = _extract_document_text(name, data)
+    if not extracted.get("ok"):
+        return _error("BAD_REQUEST", extracted.get("message", "Falha ao ler o documento."))
+    fid = _store_in_drive(name, data, upload.mimetype or "application/pdf", "Documentos", caption="via app")
+    return jsonify({"name": name, "file_id": fid, "pages": extracted["pages"], "chars": extracted["chars"],
+                    "truncated": extracted["truncated"], "text": extracted["text"]})
+
+
+@bp.post("/media/audio")
+def media_audio():
+    upload = _media_upload()
+    if upload is None:
+        return _error("BAD_REQUEST", "Áudio ausente (campo 'file').")
+    raw = upload.read(MAX_UPLOAD_MB * 1024 * 1024)
+    if not _ollama_running():
+        return _error("UPSTREAM_TIMEOUT", "Ollama não está rodando.", 504)
+
+    os.makedirs(DRIVE_DIR, exist_ok=True)
+    token = secrets.token_hex(4)
+    src = os.path.join(DRIVE_DIR, f"__in_{token}")
+    wav = os.path.join(DRIVE_DIR, f"__in_{token}.wav")
+    with open(src, "wb") as handle:
+        handle.write(raw)
+    try:
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-ar", "16000", "-ac", "1", wav],
+                       timeout=120, check=True)
+        with open(wav, "rb") as handle:
+            wav_b64 = base64.b64encode(handle.read()).decode()
+    except Exception as exc:
+        return _error("BAD_REQUEST", f"Áudio inválido (ffmpeg): {exc}")
+    finally:
+        for path in (src, wav):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    caption = str(request.form.get("caption") or "Transcreva e responda este áudio")
+    model = _resolve_model(request.form.get("model"))
+    started = time.time()
+    try:
+        reply = _ollama_vision(caption, [wav_b64], model)
+    except Exception as exc:
+        return _error("UPSTREAM_TIMEOUT", f"Falha ao processar o áudio: {exc}", 504)
+
+    audio = _tts_mp3(reply)
+    payload: Dict[str, Any] = {
+        "reply": reply,
+        "model": model,
+        "elapsed_ms": int((time.time() - started) * 1000),
+        "audio_mime": "audio/mpeg" if audio else None,
+        "audio_b64": base64.b64encode(audio).decode() if audio else None,
+    }
+    return jsonify(payload)
 
 
 # ─── RAG ─────────────────────────────────────────────────
