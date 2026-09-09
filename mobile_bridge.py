@@ -42,6 +42,24 @@ except Exception as exc:
     print(f"[mobile] youtube indisponível: {exc}", file=sys.stderr)
     youtube_module = None
 
+try:
+    import rag as rag_module
+except Exception as exc:
+    print(f"[mobile] rag indisponível: {exc}", file=sys.stderr)
+    rag_module = None
+
+try:
+    import websearch as websearch_module
+except Exception as exc:
+    print(f"[mobile] websearch indisponível: {exc}", file=sys.stderr)
+    websearch_module = None
+
+try:
+    from plugin_loader import get_plugins_list
+except Exception as exc:
+    print(f"[mobile] plugins indisponíveis: {exc}", file=sys.stderr)
+    get_plugins_list = None
+
 OLLAMA_URL = "http://localhost:11434"
 DEFAULT_MODEL = "gemma4"
 VERSION = "1.0.0"
@@ -796,6 +814,194 @@ def cleanup_run():
     if data.get("mode") == "safe":
         return jsonify(cleanup.run_safe())
     return _error("BAD_REQUEST", "Informe task ou mode=safe (run_all não é permitido pelo app).")
+
+
+# ─── RAG ─────────────────────────────────────────────────
+
+@bp.get("/rag/documents")
+def rag_documents():
+    return jsonify(db.list_rag_documents())
+
+
+@bp.post("/rag/upload")
+def rag_upload():
+    if rag_module is None:
+        return _error("INTERNAL", "Módulo RAG indisponível.", 500)
+    if "file" not in request.files:
+        return _error("BAD_REQUEST", "Arquivo ausente (campo 'file').")
+    upload = request.files["file"]
+    if not upload.filename:
+        return _error("BAD_REQUEST", "Nome de arquivo vazio.")
+    name = _safe_name(upload.filename)
+    os.makedirs(DRIVE_DIR, exist_ok=True)
+    path = os.path.join(DRIVE_DIR, f"__rag_{secrets.token_hex(4)}_{name}")
+    upload.save(path)
+    try:
+        indexed = rag_module.index_file(path, name)
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    if not indexed:
+        return _error("INTERNAL", "Falha ao indexar (precisa de PyMuPDF/poppler).", 500)
+    return jsonify({"status": "ok", "name": name})
+
+
+@bp.post("/rag/query")
+def rag_query():
+    if rag_module is None:
+        return _error("INTERNAL", "Módulo RAG indisponível.", 500)
+    question = str(_body().get("question", "")).strip()
+    if not question:
+        return _error("BAD_REQUEST", "question é obrigatório.")
+    context, sources = rag_module.query_with_context(question)
+    return jsonify({"context": context, "sources": sources})
+
+
+@bp.post("/rag/chat")
+def rag_chat():
+    if rag_module is None:
+        return _error("INTERNAL", "Módulo RAG indisponível.", 500)
+    question = str(_body().get("question", "")).strip()
+    if not question:
+        return _error("BAD_REQUEST", "question é obrigatório.")
+    context, sources = rag_module.query_with_context(question)
+    if not context:
+        return jsonify({"reply": "Nenhum documento relevante encontrado.", "sources": []})
+    prompt = ("Você é um assistente. Use o contexto abaixo para responder. "
+              "Se não houver informação suficiente, diga que não sabe. Sempre mencione as fontes.\n\n"
+              f"Contexto:\n{context}\n\nPergunta: {question}\nResposta:")
+    try:
+        response = httpx.post(f"{OLLAMA_URL}/api/chat", json={
+            "model": _model(), "messages": [{"role": "user", "content": prompt}],
+            "options": ollama_utils.get_chat_options(_model()), "stream": False,
+        }, timeout=CHAT_TIMEOUT)
+        reply = response.json().get("message", {}).get("content", "Erro.") if response.status_code == 200 else "IA indisponível"
+    except Exception as exc:
+        reply = f"Erro: {exc}"
+    return jsonify({"reply": reply, "sources": sources})
+
+
+@bp.post("/rag/delete/<int:doc_id>")
+def rag_delete(doc_id: int):
+    db.delete_rag_document(doc_id)
+    return jsonify({"status": "deleted"})
+
+
+# ─── Web Search ──────────────────────────────────────────
+
+def _websearch(query: str):
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(websearch_module.search_and_prepare(query))
+    finally:
+        loop.close()
+
+
+@bp.post("/websearch/search")
+def websearch_search():
+    if websearch_module is None:
+        return _error("INTERNAL", "Módulo de busca indisponível.", 500)
+    query = str(_body().get("query", "")).strip()
+    if not query:
+        return _error("BAD_REQUEST", "query é obrigatória.")
+    context, sources = _websearch(query)
+    return jsonify({"context": context, "sources": sources})
+
+
+@bp.post("/websearch/chat")
+def websearch_chat():
+    if websearch_module is None:
+        return _error("INTERNAL", "Módulo de busca indisponível.", 500)
+    query = str(_body().get("query", "")).strip()
+    if not query:
+        return _error("BAD_REQUEST", "query é obrigatória.")
+    context, sources = _websearch(query)
+    if not context:
+        return jsonify({"reply": "Não consegui buscar informações sobre isso.", "sources": []})
+    prompt = ("Você é um assistente. Use o contexto abaixo para responder. "
+              "Se não souber, diga que não sabe. Cite as fontes numeradas.\n\n"
+              f"Contexto:\n{context}\n\nPergunta: {query}\nResposta:")
+    try:
+        response = httpx.post(f"{OLLAMA_URL}/api/chat", json={
+            "model": _model(), "messages": [{"role": "user", "content": prompt}],
+            "options": ollama_utils.get_chat_options(_model()), "stream": False,
+        }, timeout=CHAT_TIMEOUT)
+        reply = response.json().get("message", {}).get("content", "Erro.") if response.status_code == 200 else "IA indisponível"
+    except Exception as exc:
+        reply = f"Erro: {exc}"
+    return jsonify({"reply": reply, "sources": sources})
+
+
+# ─── Plugins / Modelo / Contexto / Limpar chat ───────────
+
+_plugins_loaded = False
+
+
+@bp.get("/plugins")
+def plugins_list():
+    global _plugins_loaded
+    if get_plugins_list is None:
+        return _error("INTERNAL", "Plugins indisponíveis.", 500)
+    if not _plugins_loaded:
+        try:
+            from plugin_loader import load_plugins
+            load_plugins()
+            _plugins_loaded = True
+        except Exception as exc:
+            return _error("INTERNAL", f"Falha ao carregar plugins: {exc}", 500)
+    return jsonify(get_plugins_list())
+
+
+@bp.get("/models")
+def models_list():
+    try:
+        response = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        if response.status_code == 200:
+            return jsonify({"models": [m["name"] for m in response.json().get("models", [])]})
+    except Exception:
+        pass
+    return jsonify({"models": []})
+
+
+@bp.get("/model")
+def model_get():
+    return jsonify({"model": _model()})
+
+
+@bp.post("/model")
+def model_set():
+    name = str(_body().get("model", "")).strip()
+    if not name:
+        return _error("BAD_REQUEST", "model é obrigatório.")
+    db.set_setting("model", name)
+    ollama_utils.clear_cache()
+    return jsonify({"status": "ok", "model": name})
+
+
+@bp.get("/context")
+def context_get():
+    return jsonify(ollama_utils.get_context_info(_model()))
+
+
+@bp.post("/context")
+def context_refresh():
+    ollama_utils.clear_cache()
+    return jsonify(ollama_utils.get_context_info(_model()))
+
+
+@bp.post("/chat/clear")
+def chat_clear():
+    cid = str(_body().get("conversation_id", "")).strip()
+    with _conv_lock:
+        if cid:
+            _conversations.pop(cid, None)
+        else:
+            _conversations.clear()
+    return jsonify({"status": "cleared"})
 
 
 # ─── Trilha Rede ─────────────────────────────────────────

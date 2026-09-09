@@ -1965,10 +1965,34 @@ async def criarplugin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await criarplugin_por_descricao(update, context, descricao)
 
+def _single_instance():
+    import atexit
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "bot.pid")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        try:
+            other = int(open(path).read().strip() or 0)
+        except (ValueError, OSError):
+            other = 0
+        if other and other != os.getpid():
+            try:
+                os.kill(other, 0)
+                print(f"[bot] outra instância já está rodando (pid {other}); encerrando esta.")
+                sys.exit(0)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                print(f"[bot] instância pid {other} ativa; encerrando esta.")
+                sys.exit(0)
+    with open(path, "w") as f:
+        f.write(str(os.getpid()))
+    atexit.register(lambda: os.remove(path) if os.path.exists(path) else None)
+
 def main():
     print("=" * 50)
     print("Bot do Ollama para Telegram")
     print("=" * 50)
+    _single_instance()
 
     if not TOKEN or TOKEN == "SEU_TOKEN_AQUI":
         print("ERRO: Token do Telegram não configurado!")
