@@ -1681,6 +1681,154 @@ document.querySelector('nav a[data-module="plugins"]')?.addEventListener("click"
 
 // ─── End Cleanup ──────────────────────────────────────
 
+// ─── Configurar P2P (App Android) ──────────────────────
+
+let p2pCountdown = null;
+
+function setP2PStatus(message, cls) {
+  const el = document.getElementById("p2pStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "sec-status" + (cls ? " " + cls : "");
+}
+
+function renderP2PDevices(devices) {
+  const container = document.getElementById("p2pDeviceList");
+  if (!container) return;
+  const list = (devices || []).filter((d) => !d.revoked);
+  if (!list.length) {
+    container.innerHTML = '<p class="empty">Nenhum dispositivo pareado. Gere um código e pareie o app.</p>';
+    return;
+  }
+  container.innerHTML = list.map((d) => {
+    const last = d.last_seen ? d.last_seen.replace("T", " ").slice(0, 19) : "nunca";
+    return `<div class="rag-doc-item">
+      <span class="rag-doc-name">📱 ${d.name || d.id}</span>
+      <span class="rag-doc-meta">${d.id} · último acesso: ${last} · ${d.last_ip || "-"}</span>
+      <button class="btn-start btn-wl-add p2p-revoke" data-id="${d.id}" style="padding:4px 10px;font-size:11px">🗑 Revogar</button>
+    </div>`;
+  }).join("");
+  container.querySelectorAll(".p2p-revoke").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        await api.post(`/api/m/admin/devices/${btn.dataset.id}/revoke`, {});
+        setP2PStatus("🗑 Dispositivo revogado", "sent");
+        loadP2P();
+      } catch (_) {
+        setP2PStatus("❌ Falha ao revogar", "error");
+      }
+    });
+  });
+}
+
+async function refreshP2PProcesses() {
+  try {
+    const status = await api.p2pStatus();
+    document.getElementById("p2pGateway").textContent = status.gateway ? "Ativo" : "Parado";
+    document.getElementById("p2pGateway").style.color = status.gateway ? "var(--neon)" : "var(--danger)";
+    document.getElementById("p2pIroh").textContent = status.iroh ? "Ativo" : "Parado";
+    document.getElementById("p2pIroh").style.color = status.iroh ? "var(--neon)" : "var(--danger)";
+    if (!status.hasScripts) {
+      setP2PStatus("❌ Scripts não encontrados em " + status.repoRoot, "error");
+    }
+  } catch (_) {
+    setP2PStatus("❌ IPC indisponível", "error");
+  }
+}
+
+async function loadP2P() {
+  setP2PStatus("⏳ Carregando...", "sending");
+  await refreshP2PProcesses();
+  try {
+    const status = await api.get("/api/m/admin/status");
+    document.getElementById("p2pPin").textContent = status.pin_set ? "Definido" : "Não definido";
+    document.getElementById("p2pPin").style.color = status.pin_set ? "var(--neon)" : "var(--neon3)";
+    document.getElementById("p2pDevices").textContent = String(status.devices_count || 0);
+    const endpoints = status.lan_endpoints || [];
+    document.getElementById("p2pEndpoint").textContent = endpoints[0] || "gateway parado";
+    document.getElementById("p2pIrohId").textContent = status.iroh
+      ? `EndpointId: ${status.iroh.endpoint_id}`
+      : "EndpointId: (nó Iroh parado)";
+    renderP2PDevices(status.devices);
+    setP2PStatus("✅ Pronto", "sent");
+  } catch (error) {
+    setP2PStatus("❌ Erro: " + (error.message || error), "error");
+    renderP2PDevices([]);
+  }
+}
+
+async function p2pToggle(kind, action) {
+  setP2PStatus(action === "start" ? "⏳ Iniciando..." : "⏳ Parando...", "sending");
+  try {
+    const result = action === "start" ? await api.p2pStart(kind) : await api.p2pStop(kind);
+    setP2PStatus(result && result.ok ? "✅ " + (result.message || "ok") : "❌ " + ((result && result.message) || "falha"),
+      result && result.ok ? "sent" : "error");
+  } catch (error) {
+    setP2PStatus("❌ " + (error.message || error), "error");
+  }
+  setTimeout(() => { refreshP2PProcesses(); loadP2P(); }, 900);
+}
+
+document.querySelector('nav a[data-module="p2p"]')?.addEventListener("click", () => {
+  setTimeout(loadP2P, 50);
+});
+
+document.getElementById("p2pStartGw")?.addEventListener("click", () => p2pToggle("gateway", "start"));
+document.getElementById("p2pStopGw")?.addEventListener("click", () => p2pToggle("gateway", "stop"));
+document.getElementById("p2pStartIroh")?.addEventListener("click", () => p2pToggle("iroh", "start"));
+document.getElementById("p2pStopIroh")?.addEventListener("click", () => p2pToggle("iroh", "stop"));
+
+document.getElementById("p2pGenCode")?.addEventListener("click", async () => {
+  try {
+    const result = await api.get("/api/m/pair/new?ttl=300");
+    document.getElementById("p2pCode").textContent = result.code;
+    let remaining = result.expires_in || 120;
+    const timer = document.getElementById("p2pCodeTimer");
+    timer.textContent = `expira em ${remaining}s`;
+    timer.className = "sec-status sending";
+    clearInterval(p2pCountdown);
+    p2pCountdown = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(p2pCountdown);
+        document.getElementById("p2pCode").textContent = "------";
+        timer.textContent = "código expirado";
+        timer.className = "sec-status error";
+        return;
+      }
+      timer.textContent = `expira em ${remaining}s`;
+    }, 1000);
+    if (result.endpoints && result.endpoints.length) {
+      document.getElementById("p2pEndpoint").textContent = result.endpoints[0];
+    }
+  } catch (error) {
+    setP2PStatus("❌ " + (error.message || error), "error");
+  }
+});
+
+document.getElementById("p2pSetPin")?.addEventListener("click", async () => {
+  const input = document.getElementById("p2pPinInput");
+  const pin = (input.value || "").trim();
+  const label = document.getElementById("p2pPinStatus");
+  if (!/^\d{6}$/.test(pin)) {
+    label.textContent = "PIN deve ter 6 dígitos";
+    label.className = "sec-status error";
+    return;
+  }
+  try {
+    await api.post("/api/m/pin", { new_pin: pin });
+    input.value = "";
+    label.textContent = "✅ PIN salvo";
+    label.className = "sec-status sent";
+    loadP2P();
+  } catch (error) {
+    label.textContent = "❌ " + (error.message || error);
+    label.className = "sec-status error";
+  }
+});
+
+// ─── End P2P ───────────────────────────────────────────
+
 document.addEventListener("DOMContentLoaded", () => {
   loadDashboard();
   loadFinancas();

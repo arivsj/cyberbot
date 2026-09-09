@@ -17,6 +17,15 @@ contextBridge.exposeInMainWorld("api", {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },
+  p2pStatus() {
+    return ipcRenderer.invoke("p2p-status");
+  },
+  p2pStart(kind) {
+    return ipcRenderer.invoke("p2p-start", kind);
+  },
+  p2pStop(kind) {
+    return ipcRenderer.invoke("p2p-stop", kind);
+  },
   showItemInFolder(filePath) {
     ipcRenderer.invoke("show-item-in-folder", filePath);
   },

@@ -1,0 +1,26 @@
+[Unit]
+Description=CyberBot Iroh P2P Node
+After=network-online.target cyberbot-mobile.service
+Wants=network-online.target
+After=cyberbot-mobile.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dev/Dog Assistent
+ExecStart=/usr/bin/python3 iroh_node.py --serve
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/dev/Dog Assistent
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=default.target

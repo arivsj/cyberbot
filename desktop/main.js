@@ -55,6 +55,60 @@ function waitForServer(cb, attempt = 0) {
   });
 }
 
+const REPO_ROOT = app.isPackaged
+  ? path.join(process.resourcesPath, "backend")
+  : path.join(__dirname, "..");
+
+const P2P_SCRIPTS = {
+  gateway: { file: "mobile_gateway.py", args: ["--port", "5055"], pattern: "mobile_gateway.py" },
+  iroh: { file: "iroh_node.py", args: ["--serve"], pattern: "iroh_node.py" },
+};
+
+function p2pRunning(kind) {
+  const spec = P2P_SCRIPTS[kind];
+  if (!spec) return false;
+  try {
+    const result = spawn.sync("pgrep", ["-f", spec.pattern], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return Boolean((result.stdout || "").trim());
+  } catch {
+    return false;
+  }
+}
+
+ipcMain.handle("p2p-status", () => ({
+  gateway: p2pRunning("gateway"),
+  iroh: p2pRunning("iroh"),
+  repoRoot: REPO_ROOT,
+  hasScripts: fs.existsSync(path.join(REPO_ROOT, "mobile_gateway.py"))
+    && fs.existsSync(path.join(REPO_ROOT, "iroh_node.py")),
+}));
+
+ipcMain.handle("p2p-start", (_event, kind) => {
+  const spec = P2P_SCRIPTS[kind];
+  if (!spec) return { ok: false, message: "Serviço desconhecido" };
+  const script = path.join(REPO_ROOT, spec.file);
+  if (!fs.existsSync(script)) return { ok: false, message: spec.file + " não encontrado em " + REPO_ROOT };
+  if (p2pRunning(kind)) return { ok: true, message: "Já estava rodando" };
+  try {
+    const child = spawn("python3", [script, ...spec.args], { cwd: REPO_ROOT, detached: true, stdio: "ignore" });
+    child.unref();
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+  return { ok: true, message: "Iniciado" };
+});
+
+ipcMain.handle("p2p-stop", (_event, kind) => {
+  const spec = P2P_SCRIPTS[kind];
+  if (!spec) return { ok: false, message: "Serviço desconhecido" };
+  try {
+    spawn.sync("pkill", ["-f", spec.pattern], { stdio: "ignore" });
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+  return { ok: true, message: "Parado" };
+});
+
 ipcMain.handle("show-item-in-folder", (_event, filePath) => {
   shell.showItemInFolder(filePath);
 });

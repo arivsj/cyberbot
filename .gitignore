@@ -14,3 +14,9 @@ drive_files/*
 trilha_projetos/
 desktop/dist/
 desktop/release/
+state/
+pylibs/
+.pipcache/
+.venv-mobile/
+logs/*.out
+.controol/

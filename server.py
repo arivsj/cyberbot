@@ -731,11 +731,19 @@ def create_plugin_endpoint():
 
 # ─── Periodic cache clear ────────────────────────────────
 
+def _schedule_cache_clear(delay=7200):
+    timer = threading.Timer(delay, periodic_cache_clear)
+    timer.daemon = True
+    timer.start()
+
 def periodic_cache_clear():
     _kill_bot()
     _start_bot()
     print("[cache] Limpeza periódica de cache executada")
-    threading.Timer(7200, periodic_cache_clear).start()
+    _schedule_cache_clear()
+
+import mobile_bridge
+mobile_bridge.register(app)
 
 if __name__ == "__main__":
     db.init()
@@ -756,7 +764,7 @@ if __name__ == "__main__":
     except:
         pass
     _start_bot()
-    threading.Timer(7200, periodic_cache_clear).start()
+    _schedule_cache_clear()
     port = int(os.environ.get("PORT", 5000))
     print(f"API rodando em http://localhost:{port}")
     app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
