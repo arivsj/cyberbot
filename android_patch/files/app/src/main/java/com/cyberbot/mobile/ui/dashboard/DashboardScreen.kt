@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.cyberbot.mobile.ui.common.CyberButton
+import com.cyberbot.mobile.ui.common.RevelarTerminal
 import com.cyberbot.mobile.ui.common.StatRow
 import com.cyberbot.mobile.ui.common.corPorUso
 import com.cyberbot.mobile.ui.theme.Danger
@@ -116,6 +117,12 @@ fun DashboardRoute(
     )
 }
 
+/** Ritmo do preenchimento: cada linha entra 95ms depois da anterior. */
+private const val ATRASO_BASE_MS = 140
+private const val ATRASO_LINHA_MS = 95
+
+private fun atrasoDaLinha(indice: Int) = ATRASO_BASE_MS + indice * ATRASO_LINHA_MS
+
 @Composable
 fun DashboardScreen(
     state: DashboardUiState,
@@ -130,84 +137,119 @@ fun DashboardScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // Os cartoes aparecem vazios e vao sendo preenchidos de cima para baixo,
+            // como a saida de um terminal. O atraso da linha e global na tela.
             CyberCard(modifier = Modifier.fillMaxWidth()) {
-                SectionLabel("Diagnóstico de conexão P2P")
+                RevelarTerminal(60) { SectionLabel("Diagnóstico de conexão P2P") }
                 StatRow(
                     rotulo = "Pareado",
                     valor = if (state.session.isPaired) "SIM" else "NAO",
                     corValor = if (state.session.isPaired) Neon else Danger,
+                    atrasoMs = atrasoDaLinha(0),
                 )
-                StatRow(rotulo = "Modo", valor = state.session.transportMode.name)
-                StatRow(rotulo = "PC", valor = state.session.pcName ?: "nao pareado")
+                StatRow(
+                    rotulo = "Modo",
+                    valor = state.session.transportMode.name,
+                    atrasoMs = atrasoDaLinha(1),
+                )
+                StatRow(
+                    rotulo = "PC",
+                    valor = state.session.pcName ?: "nao pareado",
+                    atrasoMs = atrasoDaLinha(2),
+                )
                 StatRow(
                     rotulo = "Ticket Iroh",
                     valor = if (state.session.irohTicket.isBlank()) "ausente" else "presente",
                     corValor = if (state.session.irohTicket.isBlank()) TextDim else Neon,
+                    atrasoMs = atrasoDaLinha(3),
                 )
                 StatRow(
                     rotulo = "Endpoint",
                     valor = state.transportHealth?.endpoint ?: state.session.directBaseUrl,
+                    atrasoMs = atrasoDaLinha(4),
                 )
                 StatRow(
                     rotulo = "Caminho ativo",
                     valor = state.transportHealth?.path ?: "direct",
+                    atrasoMs = atrasoDaLinha(5),
                 )
                 StatRow(
                     rotulo = "Latência",
                     valor = state.transportHealth?.latencyMs?.let { "$it ms" } ?: "--",
                     divisor = false,
+                    atrasoMs = atrasoDaLinha(6),
                 )
                 state.transportHealth?.reason?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
                 }
-                CyberOutlinedButton(
-                    onClick = onRefresh,
-                    enabled = !state.isLoading,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (state.isLoading) "Testando..." else "Testar conexao")
+                RevelarTerminal(atrasoDaLinha(7)) {
+                    CyberOutlinedButton(
+                        onClick = onRefresh,
+                        enabled = !state.isLoading,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (state.isLoading) "Testando..." else "Testar conexao")
+                    }
                 }
             }
 
             CyberCard(modifier = Modifier.fillMaxWidth()) {
-                SectionLabel("Status do PC")
-                StatRow(rotulo = "Host", valor = state.status?.pc?.hostname ?: "--")
+                RevelarTerminal(atrasoDaLinha(7) - 90) { SectionLabel("Status do PC") }
+                StatRow(
+                    rotulo = "Host",
+                    valor = state.status?.pc?.hostname ?: "--",
+                    atrasoMs = atrasoDaLinha(7),
+                )
                 StatRow(
                     rotulo = "Bot",
                     valor = if (state.status?.bot?.running == true) "LIGADO" else "DESLIGADO",
                     corValor = if (state.status?.bot?.running == true) Neon else TextDim,
+                    atrasoMs = atrasoDaLinha(8),
                 )
-                StatRow(rotulo = "Ollama", valor = state.status?.ollama?.model ?: "--")
-                StatRow(rotulo = "Tailnet IP", valor = state.status?.pc?.tailnet_ip ?: "--")
+                StatRow(
+                    rotulo = "Ollama",
+                    valor = state.status?.ollama?.model ?: "--",
+                    atrasoMs = atrasoDaLinha(9),
+                )
+                StatRow(
+                    rotulo = "Tailnet IP",
+                    valor = state.status?.pc?.tailnet_ip ?: "--",
+                    atrasoMs = atrasoDaLinha(10),
+                )
                 StatRow(
                     rotulo = "LAN IP",
                     valor = state.status?.pc?.lan_ip ?: "--",
                     divisor = false,
+                    atrasoMs = atrasoDaLinha(11),
                 )
             }
 
             CyberCard(modifier = Modifier.fillMaxWidth()) {
-                SectionLabel("Telemetria")
+                RevelarTerminal(atrasoDaLinha(12) - 90) { SectionLabel("Telemetria") }
                 StatRow(
                     rotulo = "CPU",
                     valor = state.sysmon?.cpu?.toInt()?.let { "$it%" } ?: "--",
                     corValor = corPorUso(state.sysmon?.cpu),
+                    atrasoMs = atrasoDaLinha(12),
                 )
                 StatRow(
                     rotulo = "RAM",
                     valor = state.sysmon?.ram?.toInt()?.let { "$it%" } ?: "--",
                     corValor = corPorUso(state.sysmon?.ram),
+                    atrasoMs = atrasoDaLinha(13),
                 )
                 StatRow(
                     rotulo = "GPU",
                     valor = state.sysmon?.gpu?.toInt()?.let { "$it%" } ?: "--",
                     corValor = corPorUso(state.sysmon?.gpu),
+                    atrasoMs = atrasoDaLinha(14),
                 )
                 StatRow(
                     rotulo = "Temperatura",
                     valor = state.sysmon?.temperature?.toInt()?.let { "$it C" } ?: "--",
                     corValor = corPorUso(state.sysmon?.temperature),
                     divisor = false,
+                    atrasoMs = atrasoDaLinha(15),
                 )
             }
 

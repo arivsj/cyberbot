@@ -31,7 +31,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -49,6 +48,8 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cyberbot.mobile.core.security.AutenticacaoBiometrica
+import com.cyberbot.mobile.ui.matrix.MotorMatrix
+import com.cyberbot.mobile.ui.matrix.lembrarRelogioDaChuva
 import com.cyberbot.mobile.ui.theme.Bg
 import com.cyberbot.mobile.ui.theme.Danger
 import com.cyberbot.mobile.ui.theme.Neon
@@ -106,15 +107,9 @@ private fun LockScreen(
     onSumiu: () -> Unit,
 ) {
     val motor = remember { MotorMatrix() }
-    val quadro = remember { mutableStateOf(0L) }
+    val quadro = lembrarRelogioDaChuva()
     val caixaCartao = remember { mutableStateOf(Rect.Zero) }
     val saida = remember { Animatable(0f) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            withFrameNanos { quadro.value = it / 1_000_000L }
-        }
-    }
 
     val ehErro = estado == EstadoLock.CONTAGEM || estado == EstadoLock.BLOQUEIO
     val corBorda by animateColorAsState(

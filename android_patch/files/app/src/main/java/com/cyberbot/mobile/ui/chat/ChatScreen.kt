@@ -54,6 +54,7 @@ import com.cyberbot.mobile.data.repo.ChatRepository
 import com.cyberbot.mobile.data.repo.MediaRepository
 import com.cyberbot.mobile.data.repo.ModelRepository
 import com.cyberbot.mobile.ui.common.CyberCard
+import com.cyberbot.mobile.ui.matrix.MatrixFundo
 import com.cyberbot.mobile.ui.common.ErrorPane
 import com.cyberbot.mobile.ui.common.ScreenScaffold
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -623,13 +624,15 @@ fun ChatScreen(
         CyberTextButton(onClick = onOpenSaved) { Text("Abrir", fontSize = 12.sp) }
         CyberTextButton(onClick = onClear) { Text("Limpar", fontSize = 12.sp) }
     }) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            // Fundo permanente da conversa: a chuva fica atras de tudo, sempre.
+            MatrixFundo(opacidade = 0.5f)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
             if (state.replayHistory) {
                 Text(
                     "Conversa retomada: o histórico vai no próximo prompt.",
@@ -695,6 +698,7 @@ fun ChatScreen(
                     )
                 }
             }
+            }
         }
     }
 }
@@ -734,7 +738,7 @@ private fun ThinkingBubble(since: Long?) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -756,7 +760,8 @@ private fun MessageBubble(message: ChatMessageUi) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(
-                if (isUser) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+                (if (isUser) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
+                    .copy(alpha = 0.82f),
             )
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {

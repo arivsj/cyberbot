@@ -34,6 +34,7 @@ import com.cyberbot.mobile.ui.common.ScreenScaffold
 import com.cyberbot.mobile.ui.common.SecureScreenEffect
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,6 +50,9 @@ data class PcAppsUiState(
     val sleepMinutes: String = "90",
     val pin: String = "",
 )
+
+/** Piso para a animacao de invasao ser percebida mesmo quando a rede responde rapido. */
+private const val DURACAO_MINIMA_LOADING_MS = 1600L
 
 @HiltViewModel
 class PcAppsViewModel @Inject constructor(
@@ -67,7 +71,11 @@ class PcAppsViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            when (val result = repository.listApps()) {
+            val comecou = System.currentTimeMillis()
+            val result = repository.listApps()
+            val restante = DURACAO_MINIMA_LOADING_MS - (System.currentTimeMillis() - comecou)
+            if (restante > 0) delay(restante)
+            when (result) {
                 is ApiResult.Success -> _uiState.update {
                     it.copy(isLoading = false, apps = result.body)
                 }
@@ -229,6 +237,13 @@ fun PcAppsScreen(
                 )
             }
             state.error?.let { ErrorPane(it) }
+            if (state.isLoading) {
+                InvasaoLoading(
+                    modifier = Modifier.fillMaxWidth(),
+                    duracaoMs = DURACAO_MINIMA_LOADING_MS.toInt(),
+                )
+                return@Column
+            }
             CyberButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
                 Text("Recarregar lista")
             }

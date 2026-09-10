@@ -1,4 +1,4 @@
-package com.cyberbot.mobile.ui.lock
+package com.cyberbot.mobile.ui.matrix
 
 import android.graphics.Paint
 import android.graphics.Typeface

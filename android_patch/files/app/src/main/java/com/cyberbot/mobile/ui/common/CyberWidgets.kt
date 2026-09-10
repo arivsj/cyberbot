@@ -1,5 +1,7 @@
 package com.cyberbot.mobile.ui.common
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,9 +15,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +35,10 @@ import com.cyberbot.mobile.ui.theme.JetBrainsMono
 import com.cyberbot.mobile.ui.theme.Neon
 import com.cyberbot.mobile.ui.theme.Neon3
 import com.cyberbot.mobile.ui.theme.TextDim
+import kotlinx.coroutines.delay
+
+/** Bloco solido usado como cursor enquanto o valor e digitado. */
+private const val CURSOR_TERMINAL = "\u2588"
 
 /** Verde/ciano ate 60%, laranja ate 85%, vermelho acima. */
 fun corPorUso(percentual: Double?): Color = when {
@@ -37,8 +49,43 @@ fun corPorUso(percentual: Double?): Color = when {
 }
 
 /**
+ * Revela o conteudo depois de um atraso, com um leve deslize da esquerda. Serve para
+ * preencher uma tela de cima para baixo, como a saida de um terminal.
+ */
+@Composable
+fun RevelarTerminal(
+    atrasoMs: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    var revelado by remember { mutableStateOf(atrasoMs <= 0) }
+    LaunchedEffect(atrasoMs) {
+        if (atrasoMs > 0) {
+            delay(atrasoMs.toLong())
+            revelado = true
+        }
+    }
+    val progresso by animateFloatAsState(
+        targetValue = if (revelado) 1f else 0f,
+        animationSpec = tween(durationMillis = 170),
+        label = "revelarTerminal",
+    )
+    Box(
+        modifier = modifier.graphicsLayer {
+            alpha = progresso
+            translationX = (1f - progresso) * -16f
+        },
+    ) {
+        content()
+    }
+}
+
+/**
  * Uma linha "rotulo -> valor" alinhada nas duas pontas, com o valor em fonte mono
  * e cor de destaque. Substitui as linhas soltas de texto que ficavam todas iguais.
+ *
+ * Com [atrasoMs] > 0 a linha entra depois do atraso e o valor e digitado caractere a
+ * caractere, com cursor, como um terminal escrevendo a resposta.
  */
 @Composable
 fun StatRow(
@@ -47,8 +94,24 @@ fun StatRow(
     modifier: Modifier = Modifier,
     corValor: Color = Neon,
     divisor: Boolean = true,
+    atrasoMs: Int = 0,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    var digitados by remember(valor) { mutableStateOf(if (atrasoMs <= 0) valor.length else 0) }
+    LaunchedEffect(valor, atrasoMs) {
+        if (atrasoMs <= 0) {
+            digitados = valor.length
+            return@LaunchedEffect
+        }
+        digitados = 0
+        repeat(valor.length) { indice ->
+            delay(16)
+            digitados = indice + 1
+        }
+    }
+    val escrevendo = atrasoMs > 0 && digitados < valor.length
+
+    RevelarTerminal(atrasoMs = atrasoMs, modifier = modifier) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -62,7 +125,7 @@ fun StatRow(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = valor,
+                text = valor.take(digitados) + if (escrevendo) CURSOR_TERMINAL else "",
                 fontFamily = JetBrainsMono,
                 fontWeight = FontWeight.Medium,
                 fontSize = MaterialTheme.typography.bodySmall.fontSize,
@@ -79,6 +142,7 @@ fun StatRow(
                     .background(Border.copy(alpha = 0.45f)),
             )
         }
+    }
     }
 }
 
