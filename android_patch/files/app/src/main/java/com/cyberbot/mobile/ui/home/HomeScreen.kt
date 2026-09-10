@@ -2,9 +2,10 @@ package com.cyberbot.mobile.ui.home
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,12 +35,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.cyberbot.mobile.ui.common.CyberCard
+import com.cyberbot.mobile.ui.common.PressableCyberCard
 import com.cyberbot.mobile.ui.common.ScreenScaffold
 import com.cyberbot.mobile.ui.nav.Routes
+import kotlin.math.ceil
 
 private const val COLUNAS = 3
 private val ESPACO = 12.dp
+private val ALTURA_MINIMA = 104.dp
 
 private data class HomeModule(
     val route: String,
@@ -74,26 +77,33 @@ fun HomeScreen(
     onOpenDestination: (String) -> Unit,
 ) {
     ScreenScaffold(title = "Home") { innerPadding ->
-        // Cards com tamanho fixo (quadrados): novos módulos entram embaixo e a grade rola.
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(COLUNAS),
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(ESPACO),
-            verticalArrangement = Arrangement.spacedBy(ESPACO),
+                .padding(innerPadding),
         ) {
-            items(homeModules) { module ->
-                CyberCard(
-                    modifier = Modifier
-                        .aspectRatio(1f)
-                        .clickable { onOpenDestination(module.route) },
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+            val linhas = ceil(homeModules.size / COLUNAS.toFloat()).toInt().coerceAtLeast(1)
+            // Distribui a altura disponível entre as linhas: a grade termina logo acima do
+            // menu inferior, sem sobrar espaço vazio embaixo.
+            val alturaCelula = ((maxHeight - ESPACO * (linhas - 1) - 32.dp) / linhas)
+                .coerceAtLeast(ALTURA_MINIMA)
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(COLUNAS),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(ESPACO),
+                verticalArrangement = Arrangement.spacedBy(ESPACO),
+            ) {
+                items(homeModules) { module ->
+                    PressableCyberCard(
+                        onClick = { onOpenDestination(module.route) },
+                        modifier = Modifier.height(alturaCelula),
+                        contentPadding = PaddingValues(0.dp),
                         verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        contentModifier = Modifier.fillMaxSize(),
                     ) {
                         Icon(
                             imageVector = module.icon,

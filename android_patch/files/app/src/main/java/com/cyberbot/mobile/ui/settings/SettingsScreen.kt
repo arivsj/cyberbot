@@ -24,6 +24,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.cyberbot.mobile.ui.common.CyberButton
+import com.cyberbot.mobile.ui.common.CyberOutlinedButton
+import com.cyberbot.mobile.ui.common.CyberTextButton
 import com.cyberbot.mobile.core.model.SessionSnapshot
 import com.cyberbot.mobile.core.model.TransportHealth
 import com.cyberbot.mobile.core.model.TransportMode
@@ -144,7 +147,7 @@ fun SettingsSection(
                 )
             },
             confirmButton = {
-                TextButton(
+                CyberTextButton(
                     onClick = {
                         confirmUnpair = false
                         viewModel.unpair()
@@ -154,7 +157,7 @@ fun SettingsSection(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmUnpair = false }) { Text("Cancelar") }
+                CyberTextButton(onClick = { confirmUnpair = false }) { Text("Cancelar") }
             },
         )
     }
@@ -164,7 +167,7 @@ fun SettingsSection(
             SectionLabel("Conexão")
             Text("PC pareado: ${state.session.pcName ?: "nenhum"}")
             Text("Device ID: ${state.session.deviceId ?: "--"}")
-            OutlinedButton(
+            CyberOutlinedButton(
                 onClick = { confirmUnpair = true },
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -202,7 +205,7 @@ fun SettingsSection(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            Button(onClick = viewModel::persistNetworkConfig, modifier = Modifier.fillMaxWidth()) {
+            CyberButton(onClick = viewModel::persistNetworkConfig, modifier = Modifier.fillMaxWidth()) {
                 Text("Salvar rede")
             }
         }
@@ -220,12 +223,12 @@ fun SettingsSection(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            Button(onClick = viewModel::persistCachedPin, modifier = Modifier.fillMaxWidth()) {
+            CyberButton(onClick = viewModel::persistCachedPin, modifier = Modifier.fillMaxWidth()) {
                 Text("Salvar PIN")
             }
         }
 
-        OutlinedButton(
+        CyberOutlinedButton(
             onClick = viewModel::clearLocalData,
             modifier = Modifier.fillMaxWidth(),
         ) {

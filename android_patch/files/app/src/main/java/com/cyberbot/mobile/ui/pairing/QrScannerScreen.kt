@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.cyberbot.mobile.ui.common.CyberButton
+import com.cyberbot.mobile.ui.common.CyberOutlinedButton
 import com.cyberbot.mobile.core.model.PairingPayload
 import com.cyberbot.mobile.ui.common.ErrorPane
 import com.cyberbot.mobile.ui.common.ScreenScaffold
@@ -103,7 +105,7 @@ fun QrScannerRoute(
                     "O app precisa da camera para ler o QR Code do PC.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                Button(
+                CyberButton(
                     onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -146,7 +148,7 @@ fun QrScannerRoute(
             }
 
             error?.let { ErrorPane(it) }
-            OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+            CyberOutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
                 Text("Cancelar")
             }
         }

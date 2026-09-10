@@ -46,8 +46,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -55,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cyberbot.mobile.ui.theme.Neon
 import com.cyberbot.mobile.ui.theme.Neon2
+import com.cyberbot.mobile.ui.theme.Rajdhani
 import com.cyberbot.mobile.ui.theme.Surface
 import com.cyberbot.mobile.ui.theme.Surface2
 import com.cyberbot.mobile.ui.theme.TextDim
@@ -207,7 +206,6 @@ private fun ItemBarra(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val haptics = LocalHapticFeedback.current
     val interacao = remember { MutableInteractionSource() }
     val pressionado by interacao.collectIsPressedAsState()
 
@@ -236,7 +234,6 @@ private fun ItemBarra(
                 interactionSource = interacao,
                 indication = null,
             ) {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()
             }
             // Compensa o espaço de descida que a caixa do Text reserva abaixo das letras:
@@ -257,9 +254,10 @@ private fun ItemBarra(
         Text(
             text = item.label,
             color = corIcone,
-            fontSize = 10.sp,
+            fontFamily = Rajdhani,
+            fontSize = 11.sp,
             fontWeight = if (selecionado) FontWeight.Bold else FontWeight.Medium,
-            letterSpacing = 0.5.sp,
+            letterSpacing = 0.4.sp,
             maxLines = 1,
             textAlign = TextAlign.Center,
             modifier = Modifier.alpha(if (selecionado) 1f else 0.75f),

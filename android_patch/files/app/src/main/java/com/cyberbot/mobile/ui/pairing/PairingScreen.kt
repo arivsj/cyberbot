@@ -24,6 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.ViewModel
+import com.cyberbot.mobile.ui.common.CyberButton
 import com.cyberbot.mobile.core.model.PairingPayload
 import com.cyberbot.mobile.core.net.ApiResult
 import com.cyberbot.mobile.data.repo.SessionRepository
@@ -196,7 +197,7 @@ fun PairingScreen(
             }
 
             CyberCard(modifier = Modifier.fillMaxWidth()) {
-                Button(
+                CyberButton(
                     onClick = onScanQr,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -235,7 +236,7 @@ fun PairingScreen(
                     singleLine = true,
                 )
                 state.error?.let { ErrorPane(it) }
-                Button(
+                CyberButton(
                     onClick = onPair,
                     enabled = !state.isSubmitting,
                     modifier = Modifier.fillMaxWidth(),

@@ -19,6 +19,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.cyberbot.mobile.ui.common.CyberButton
+import com.cyberbot.mobile.ui.common.StatRow
+import com.cyberbot.mobile.ui.common.corPorUso
+import com.cyberbot.mobile.ui.theme.Danger
+import com.cyberbot.mobile.ui.theme.Neon
+import com.cyberbot.mobile.ui.theme.TextDim
+import com.cyberbot.mobile.ui.common.CyberOutlinedButton
 import com.cyberbot.mobile.core.model.SessionSnapshot
 import com.cyberbot.mobile.core.model.StatusResponse
 import com.cyberbot.mobile.core.model.SysmonSnapshot
@@ -125,17 +132,35 @@ fun DashboardScreen(
         ) {
             CyberCard(modifier = Modifier.fillMaxWidth()) {
                 SectionLabel("Diagnóstico de conexão P2P")
-                Text("Pareado: ${if (state.session.isPaired) "sim" else "nao"}")
-                Text("Modo: ${state.session.transportMode.name}")
-                Text("PC: ${state.session.pcName ?: "Nao pareado"}")
-                Text("Ticket Iroh: ${if (state.session.irohTicket.isBlank()) "ausente" else "presente"}")
-                Text("Endpoint: ${state.transportHealth?.endpoint ?: state.session.directBaseUrl}")
-                Text("Caminho ativo: ${state.transportHealth?.path ?: "direct"}")
-                Text("Latencia: ${state.transportHealth?.latencyMs?.let { "$it ms" } ?: "--"}")
+                StatRow(
+                    rotulo = "Pareado",
+                    valor = if (state.session.isPaired) "SIM" else "NAO",
+                    corValor = if (state.session.isPaired) Neon else Danger,
+                )
+                StatRow(rotulo = "Modo", valor = state.session.transportMode.name)
+                StatRow(rotulo = "PC", valor = state.session.pcName ?: "nao pareado")
+                StatRow(
+                    rotulo = "Ticket Iroh",
+                    valor = if (state.session.irohTicket.isBlank()) "ausente" else "presente",
+                    corValor = if (state.session.irohTicket.isBlank()) TextDim else Neon,
+                )
+                StatRow(
+                    rotulo = "Endpoint",
+                    valor = state.transportHealth?.endpoint ?: state.session.directBaseUrl,
+                )
+                StatRow(
+                    rotulo = "Caminho ativo",
+                    valor = state.transportHealth?.path ?: "direct",
+                )
+                StatRow(
+                    rotulo = "Latência",
+                    valor = state.transportHealth?.latencyMs?.let { "$it ms" } ?: "--",
+                    divisor = false,
+                )
                 state.transportHealth?.reason?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
                 }
-                OutlinedButton(
+                CyberOutlinedButton(
                     onClick = onRefresh,
                     enabled = !state.isLoading,
                     modifier = Modifier.fillMaxWidth(),
@@ -146,26 +171,51 @@ fun DashboardScreen(
 
             CyberCard(modifier = Modifier.fillMaxWidth()) {
                 SectionLabel("Status do PC")
-                Text("Host: ${state.status?.pc?.hostname ?: "--"}")
-                Text("Bot: ${if (state.status?.bot?.running == true) "Ligado" else "Desligado"}")
-                Text("Ollama: ${state.status?.ollama?.model ?: "--"}")
-                Text("Tailnet IP: ${state.status?.pc?.tailnet_ip ?: "--"}")
-                Text("LAN IP: ${state.status?.pc?.lan_ip ?: "--"}")
+                StatRow(rotulo = "Host", valor = state.status?.pc?.hostname ?: "--")
+                StatRow(
+                    rotulo = "Bot",
+                    valor = if (state.status?.bot?.running == true) "LIGADO" else "DESLIGADO",
+                    corValor = if (state.status?.bot?.running == true) Neon else TextDim,
+                )
+                StatRow(rotulo = "Ollama", valor = state.status?.ollama?.model ?: "--")
+                StatRow(rotulo = "Tailnet IP", valor = state.status?.pc?.tailnet_ip ?: "--")
+                StatRow(
+                    rotulo = "LAN IP",
+                    valor = state.status?.pc?.lan_ip ?: "--",
+                    divisor = false,
+                )
             }
 
             CyberCard(modifier = Modifier.fillMaxWidth()) {
                 SectionLabel("Telemetria")
-                Text("CPU: ${state.sysmon?.cpu?.toInt()?.toString() ?: "--"}%")
-                Text("RAM: ${state.sysmon?.ram?.toInt()?.toString() ?: "--"}%")
-                Text("GPU: ${state.sysmon?.gpu?.toInt()?.toString() ?: "--"}%")
-                Text("Temp: ${state.sysmon?.temperature?.toInt()?.toString() ?: "--"} C")
+                StatRow(
+                    rotulo = "CPU",
+                    valor = state.sysmon?.cpu?.toInt()?.let { "$it%" } ?: "--",
+                    corValor = corPorUso(state.sysmon?.cpu),
+                )
+                StatRow(
+                    rotulo = "RAM",
+                    valor = state.sysmon?.ram?.toInt()?.let { "$it%" } ?: "--",
+                    corValor = corPorUso(state.sysmon?.ram),
+                )
+                StatRow(
+                    rotulo = "GPU",
+                    valor = state.sysmon?.gpu?.toInt()?.let { "$it%" } ?: "--",
+                    corValor = corPorUso(state.sysmon?.gpu),
+                )
+                StatRow(
+                    rotulo = "Temperatura",
+                    valor = state.sysmon?.temperature?.toInt()?.let { "$it C" } ?: "--",
+                    corValor = corPorUso(state.sysmon?.temperature),
+                    divisor = false,
+                )
             }
 
             state.error?.let { ErrorPane(it) }
 
             SettingsSection()
 
-            Button(
+            CyberButton(
                 onClick = onRefresh,
                 enabled = !state.isLoading,
                 modifier = Modifier.fillMaxWidth(),

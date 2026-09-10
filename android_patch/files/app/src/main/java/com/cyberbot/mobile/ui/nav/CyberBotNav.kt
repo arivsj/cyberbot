@@ -1,5 +1,10 @@
 package com.cyberbot.mobile.ui.nav
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -112,6 +117,24 @@ fun CyberBotNavRoot(
         NavHost(
             navController = navController,
             startDestination = Routes.Pairing,
+            // Entrada com deslize curto + fade no lugar do fade seco padrao. O deslocamento
+            // e de 1/12 da tela para dar profundidade sem parecer pesado.
+            enterTransition = {
+                fadeIn(animationSpec = tween(200)) +
+                    slideInHorizontally(animationSpec = tween(300)) { largura -> largura / 12 }
+            },
+            exitTransition = {
+                fadeOut(animationSpec = tween(140)) +
+                    slideOutHorizontally(animationSpec = tween(300)) { largura -> -largura / 14 }
+            },
+            popEnterTransition = {
+                fadeIn(animationSpec = tween(200)) +
+                    slideInHorizontally(animationSpec = tween(300)) { largura -> -largura / 12 }
+            },
+            popExitTransition = {
+                fadeOut(animationSpec = tween(140)) +
+                    slideOutHorizontally(animationSpec = tween(300)) { largura -> largura / 14 }
+            },
             // consumeWindowInsets: o padding do Scaffold de fora (barra inferior + barra de
             // status) é dado aqui e marcado como já consumido. Sem isso o Scaffold de dentro
             // de cada tela soma o inset de novo e sobra uma faixa morta de ~50px acima do menu.
