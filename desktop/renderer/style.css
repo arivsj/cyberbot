@@ -725,6 +725,20 @@ tr:hover td { background: var(--surface2); }
 .sec-report-line { font-size: 13px; padding: 4px 0; }
 .sec-report-detail { font-size: 11px; padding: 2px 0 2px 24px; color: var(--danger); word-break: break-all; }
 
+/* QR Code de pareamento (P2P) */
+.p2p-qr-box {
+  width: 260px;
+  max-width: 100%;
+  background: #ffffff;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--neon);
+  box-shadow: 0 0 22px rgba(0, 255, 247, 0.25);
+  display: inline-block;
+  line-height: 0;
+}
+.p2p-qr-box svg { width: 100%; height: auto; display: block; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }

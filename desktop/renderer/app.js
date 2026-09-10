@@ -1692,6 +1692,51 @@ function setP2PStatus(message, cls) {
   el.className = "sec-status" + (cls ? " " + cls : "");
 }
 
+function renderP2PQr(svg, payload) {
+  const wrap = document.getElementById("p2pQrWrap");
+  const box = document.getElementById("p2pQrBox");
+  if (!wrap || !box) return;
+  if (!svg) {
+    wrap.style.display = "none";
+    box.innerHTML = "";
+    setP2PStatus("⚠ O QR não foi gerado — ride: pip3 install --target ./pylibs qrcode", "error");
+    return;
+  }
+  box.innerHTML = String(svg).replace(/^<\?xml[^>]*\?>/, "");
+  box.title = payload || "";
+  wrap.style.display = "block";
+}
+
+function showP2PCode(code, expiresIn) {
+  const label = document.getElementById("p2pCode");
+  const timer = document.getElementById("p2pCodeTimer");
+  if (!label || !timer) return;
+  label.textContent = code;
+  let remaining = expiresIn || 300;
+  timer.textContent = `expira em ${remaining}s`;
+  timer.className = "sec-status sending";
+  clearInterval(p2pCountdown);
+  p2pCountdown = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      clearInterval(p2pCountdown);
+      label.textContent = "------";
+      clearP2PQr();
+      timer.textContent = "expirado — gere outro";
+      timer.className = "sec-status error";
+      return;
+    }
+    timer.textContent = `expira em ${remaining}s`;
+  }, 1000);
+}
+
+function clearP2PQr() {
+  const wrap = document.getElementById("p2pQrWrap");
+  const box = document.getElementById("p2pQrBox");
+  if (box) box.innerHTML = "";
+  if (wrap) wrap.style.display = "none";
+}
+
 function renderP2PDevices(devices) {
   const container = document.getElementById("p2pDeviceList");
   if (!container) return;
@@ -1779,30 +1824,38 @@ document.getElementById("p2pStartIroh")?.addEventListener("click", () => p2pTogg
 document.getElementById("p2pStopIroh")?.addEventListener("click", () => p2pToggle("iroh", "stop"));
 
 document.getElementById("p2pGenCode")?.addEventListener("click", async () => {
+  setP2PStatus("⏳ Gerando senha...", "sending");
   try {
     const result = await api.get("/api/m/pair/new?ttl=300");
-    document.getElementById("p2pCode").textContent = result.code;
-    let remaining = result.expires_in || 120;
-    const timer = document.getElementById("p2pCodeTimer");
-    timer.textContent = `expira em ${remaining}s`;
-    timer.className = "sec-status sending";
-    clearInterval(p2pCountdown);
-    p2pCountdown = setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        clearInterval(p2pCountdown);
-        document.getElementById("p2pCode").textContent = "------";
-        timer.textContent = "código expirado";
-        timer.className = "sec-status error";
-        return;
-      }
-      timer.textContent = `expira em ${remaining}s`;
-    }, 1000);
+    showP2PCode(result.code, result.expires_in);
+    clearP2PQr();
     if (result.endpoints && result.endpoints.length) {
       document.getElementById("p2pEndpoint").textContent = result.endpoints[0];
     }
+    setP2PStatus("✅ Senha pronta — digite no app (Pairing)", "sent");
   } catch (error) {
     setP2PStatus("❌ " + (error.message || error), "error");
+  }
+});
+
+document.getElementById("p2pGenQr")?.addEventListener("click", async () => {
+  setP2PStatus("⏳ Gerando QR Code...", "sending");
+  try {
+    const result = await api.get("/api/m/admin/pair/qr?ttl=300");
+    showP2PCode(result.code, result.expires_in);
+    renderP2PQr(result.qr_svg, result.payload);
+    if (result.endpoints && result.endpoints.length) {
+      document.getElementById("p2pEndpoint").textContent = result.endpoints[0];
+    }
+    const comIroh = !!(result.iroh && result.iroh.ticket);
+    if (comIroh) {
+      setP2PStatus("✅ QR pronto — no app use 📷 Ler QR Code", "sent");
+    } else {
+      setP2PStatus("⚠ QR pronto, mas sem Iroh (ligue o Nó Iroh para funcionar no 4G)", "sending");
+    }
+  } catch (error) {
+    clearP2PQr();
+    setP2PStatus("❌ QR indisponível: feche e reabra o app do desktop para reiniciar o servidor (" + (error.message || error) + ")", "error");
   }
 });
 

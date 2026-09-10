@@ -288,6 +288,94 @@
       </div>
       <div class="sec-controls"><span id="plStatus" class="sec-status"></span></div>
     </div>
+  <div class="module hidden" id="module-p2p">
+    <h1>📱 Configurar P2P — App Android</h1>
+
+    <div class="cards">
+      <div class="card"><div class="label">Gateway LAN</div><div class="value" id="p2pGateway">-</div></div>
+      <div class="card"><div class="label">Nó Iroh</div><div class="value" id="p2pIroh">-</div></div>
+      <div class="card"><div class="label">PIN</div><div class="value" id="p2pPin">-</div></div>
+      <div class="card"><div class="label">Dispositivos</div><div class="value" id="p2pDevices">-</div></div>
+    </div>
+
+    <h2 class="section-title">1. Serviços do PC</h2>
+    <div class="cards">
+      <div class="card wide">
+        <div class="label">Ligar / desligar</div>
+        <div class="sec-controls" style="margin-bottom:0;flex-wrap:wrap">
+          <button class="btn-start" id="p2pStartGw">▶ Gateway</button>
+          <button class="btn-start btn-stop" id="p2pStopGw">■ Gateway</button>
+          <button class="btn-start" id="p2pStartIroh">▶ Nó Iroh</button>
+          <button class="btn-start btn-stop" id="p2pStopIroh">■ Nó Iroh</button>
+          <span id="p2pStatus" class="sec-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">2. Endpoint para o app</h2>
+    <div class="cards">
+      <div class="card wide">
+        <div class="label">Cole na tela de pareamento do app</div>
+        <div id="p2pEndpoint" class="sec-cmd" style="font-size:15px;display:inline-block">-</div>
+        <div class="sec-card-meta" id="p2pIrohId" style="margin-top:10px">EndpointId: -</div>
+        <div class="sec-card-desc" style="margin-top:6px">O primeiro pareamento precisa do celular na mesma rede Wi-Fi. Depois o Iroh assume e funciona de qualquer rede.</div>
+      </div>
+    </div>
+
+    <h2 class="section-title">3. Pareamento do app</h2>
+    <div class="cards">
+      <div class="card wide" style="text-align:center">
+        <div class="sec-controls" style="margin-bottom:0;justify-content:center;flex-wrap:wrap">
+          <button class="btn-start" id="p2pGenCode">🔗 Gerar senha</button>
+          <button class="btn-start" id="p2pGenQr">📷 Gerar QR Code</button>
+          <span class="sec-scanner-progress" id="p2pCode" style="font-size:24px">------</span>
+          <span id="p2pCodeTimer" class="sec-status"></span>
+        </div>
+        <div id="p2pQrWrap" style="display:none;margin-top:18px">
+          <div class="p2p-qr-box" id="p2pQrBox"></div>
+          <div class="sec-card-desc" style="margin-top:10px">
+            No app: <b>Pairing → 📷 Ler QR Code</b>. O QR já leva o endereço do PC e o ticket Iroh,
+            então o app funciona fora de casa (4G) sem digitar nada.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">4. PIN das ações destrutivas</h2>
+    <div class="cards">
+      <div class="card wide">
+        <div class="wl-input-row" style="margin:0">
+          <input class="wl-input" id="p2pPinInput" type="password" inputmode="numeric" maxlength="6" placeholder="PIN de 6 dígitos">
+          <button class="btn-start btn-wl-add" id="p2pSetPin">💾 Salvar PIN</button>
+          <span id="p2pPinStatus" class="sec-status"></span>
+        </div>
+        <div class="sec-card-desc" style="margin-top:8px">O PIN é exigido para bloquear a tela, agendar desligamento, parar o bot e rodar limpeza pelo app.</div>
+      </div>
+    </div>
+
+    <h2 class="section-title">5. Dispositivos pareados</h2>
+    <div class="cards">
+      <div class="card wide">
+        <div id="p2pDeviceList"><p class="loading">Carregando...</p></div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Comandos equivalentes (terminal)</h2>
+    <div class="cards">
+      <div class="card wide">
+        <div class="sec-card-body">
+          <div class="sec-line"><span class="sec-cmd">python3 mobile_gateway.py --port 5055</span> — sobe a API do app na LAN</div>
+          <div class="sec-line"><span class="sec-cmd">python3 iroh_node.py --serve</span> — liga o transporte P2P (Iroh)</div>
+          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --pair</span> — gera o código de 6 dígitos</div>
+          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --set-pin</span> — define o PIN</div>
+          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --devices</span> — lista os dispositivos</div>
+          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --revoke &lt;device_id&gt;</span> — revoga um dispositivo</div>
+          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --selftest</span> — roda os 49 testes de aceite</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   </main>
 
   <div id="modalOverlay" class="modal-overlay hidden" onclick="closeModal()">
@@ -398,85 +486,6 @@
     <div class="sec-controls"><span id="plStatus" class="sec-status"></span></div>
   </div>
 
-  <div class="module hidden" id="module-p2p">
-    <h1>📱 Configurar P2P — App Android</h1>
-
-    <div class="cards">
-      <div class="card"><div class="label">Gateway LAN</div><div class="value" id="p2pGateway">-</div></div>
-      <div class="card"><div class="label">Nó Iroh</div><div class="value" id="p2pIroh">-</div></div>
-      <div class="card"><div class="label">PIN</div><div class="value" id="p2pPin">-</div></div>
-      <div class="card"><div class="label">Dispositivos</div><div class="value" id="p2pDevices">-</div></div>
-    </div>
-
-    <h2 class="section-title">1. Serviços do PC</h2>
-    <div class="cards">
-      <div class="card wide">
-        <div class="label">Ligar / desligar</div>
-        <div class="sec-controls" style="margin-bottom:0;flex-wrap:wrap">
-          <button class="btn-start" id="p2pStartGw">▶ Gateway</button>
-          <button class="btn-start btn-stop" id="p2pStopGw">■ Gateway</button>
-          <button class="btn-start" id="p2pStartIroh">▶ Nó Iroh</button>
-          <button class="btn-start btn-stop" id="p2pStopIroh">■ Nó Iroh</button>
-          <span id="p2pStatus" class="sec-status"></span>
-        </div>
-      </div>
-    </div>
-
-    <h2 class="section-title">2. Endpoint para o app</h2>
-    <div class="cards">
-      <div class="card wide">
-        <div class="label">Cole na tela de pareamento do app</div>
-        <div id="p2pEndpoint" class="sec-cmd" style="font-size:15px;display:inline-block">-</div>
-        <div class="sec-card-meta" id="p2pIrohId" style="margin-top:10px">EndpointId: -</div>
-        <div class="sec-card-desc" style="margin-top:6px">O primeiro pareamento precisa do celular na mesma rede Wi-Fi. Depois o Iroh assume e funciona de qualquer rede.</div>
-      </div>
-    </div>
-
-    <h2 class="section-title">3. Código de pareamento</h2>
-    <div class="cards">
-      <div class="card wide">
-        <div class="sec-controls" style="margin-bottom:0">
-          <button class="btn-start" id="p2pGenCode">🔗 Gerar código</button>
-          <span class="sec-scanner-progress" id="p2pCode" style="font-size:24px">------</span>
-          <span id="p2pCodeTimer" class="sec-status"></span>
-        </div>
-      </div>
-    </div>
-
-    <h2 class="section-title">4. PIN das ações destrutivas</h2>
-    <div class="cards">
-      <div class="card wide">
-        <div class="wl-input-row" style="margin:0">
-          <input class="wl-input" id="p2pPinInput" type="password" inputmode="numeric" maxlength="6" placeholder="PIN de 6 dígitos">
-          <button class="btn-start btn-wl-add" id="p2pSetPin">💾 Salvar PIN</button>
-          <span id="p2pPinStatus" class="sec-status"></span>
-        </div>
-        <div class="sec-card-desc" style="margin-top:8px">O PIN é exigido para bloquear a tela, agendar desligamento, parar o bot e rodar limpeza pelo app.</div>
-      </div>
-    </div>
-
-    <h2 class="section-title">5. Dispositivos pareados</h2>
-    <div class="cards">
-      <div class="card wide">
-        <div id="p2pDeviceList"><p class="loading">Carregando...</p></div>
-      </div>
-    </div>
-
-    <h2 class="section-title">Comandos equivalentes (terminal)</h2>
-    <div class="cards">
-      <div class="card wide">
-        <div class="sec-card-body">
-          <div class="sec-line"><span class="sec-cmd">python3 mobile_gateway.py --port 5055</span> — sobe a API do app na LAN</div>
-          <div class="sec-line"><span class="sec-cmd">python3 iroh_node.py --serve</span> — liga o transporte P2P (Iroh)</div>
-          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --pair</span> — gera o código de 6 dígitos</div>
-          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --set-pin</span> — define o PIN</div>
-          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --devices</span> — lista os dispositivos</div>
-          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --revoke &lt;device_id&gt;</span> — revoga um dispositivo</div>
-          <div class="sec-line"><span class="sec-cmd">python3 mobile_bridge.py --selftest</span> — roda os 49 testes de aceite</div>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <script src="app.js"></script>
 </body>

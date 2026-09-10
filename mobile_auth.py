@@ -141,7 +141,7 @@ def _check_pair_code(code: str) -> Tuple[bool, Optional[str], Optional[int]]:
 
 
 def pair_device(code: str, device_name: str, app_version: str = "", pubkey: Optional[str] = None,
-                remote_ip: Optional[str] = None) -> Dict[str, Any]:
+                remote_ip: Optional[str] = None, fingerprint: Optional[str] = None) -> Dict[str, Any]:
     ok, error_code, retry_after = _check_pair_code(code)
     if not ok:
         _audit("pair_failed", code=error_code, ip=remote_ip)
@@ -149,16 +149,37 @@ def pair_device(code: str, device_name: str, app_version: str = "", pubkey: Opti
 
     with _lock:
         state = _load()
+        token = secrets.token_urlsafe(32)
+        existing = None
+        if fingerprint:
+            for device in state["devices"]:
+                if device.get("fingerprint") and hmac.compare_digest(device["fingerprint"], str(fingerprint)):
+                    existing = device
+                    break
+        if existing is not None:
+            device_id = existing["id"]
+            existing.update({
+                "name": (device_name or existing.get("name") or "Android")[:64],
+                "token_hash": _hash_token(token),
+                "pubkey": pubkey or existing.get("pubkey"),
+                "last_seen": _now_iso(),
+                "last_ip": remote_ip,
+                "app_version": (app_version or "")[:32],
+                "revoked": False,
+            })
+            _save(state)
+            _audit("repaired", device_id=device_id, name=device_name, ip=remote_ip)
+            return {"ok": True, "device_id": device_id, "token": token, "reused": True}
         active = [d for d in state["devices"] if not d.get("revoked")]
         if len(active) >= MAX_DEVICES:
             return {"ok": False, "code": "DEVICE_LIMIT", "retry_after": None}
-        token = secrets.token_urlsafe(32)
         device_id = "dev_" + secrets.token_hex(4)
         state["devices"].append({
             "id": device_id,
             "name": (device_name or "Android")[:64],
             "token_hash": _hash_token(token),
             "pubkey": pubkey,
+            "fingerprint": str(fingerprint)[:128] if fingerprint else None,
             "endpoint_id": None,
             "created_at": _now_iso(),
             "last_seen": None,

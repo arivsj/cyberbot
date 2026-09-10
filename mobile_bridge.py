@@ -13,7 +13,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from flask import Blueprint, Response, g, jsonify, request, send_file, stream_with_context
@@ -120,6 +120,29 @@ def _lan_ip() -> Optional[str]:
             return sock.getsockname()[0]
     except Exception:
         return None
+
+
+def _all_lan_ips() -> List[str]:
+    """Todos os IPv4 privados do PC (o app tenta um por um até achar o alcançável)."""
+    ips: List[str] = []
+    try:
+        out = subprocess.run(["ip", "-4", "-o", "addr", "show"], capture_output=True, text=True, timeout=3).stdout
+    except Exception:
+        out = ""
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        addr = parts[3].split("/")[0]
+        if addr.startswith("127.") or addr.startswith("169.254."):
+            continue
+        if addr.startswith(("10.", "192.168.", "172.")) or addr.startswith("100."):
+            if addr not in ips:
+                ips.append(addr)
+    primary = _lan_ip()
+    if primary and primary not in ips:
+        ips.insert(0, primary)
+    return ips
 
 
 def _tailnet_ip() -> Optional[str]:
@@ -321,11 +344,10 @@ def pair_new():
     result = auth.generate_pair_code(ttl)
     if not result.get("ok"):
         return _error(result.get("code", "PAIR_LOCKED"), "Pareamento bloqueado.", 423, result.get("retry_after"))
-    host = request.host
     return jsonify({
         "code": result["code"],
         "expires_in": result["expires_in"],
-        "endpoints": _endpoint_urls(host),
+        "endpoints": _gateway_endpoints(),
         "pc_name": socket.gethostname(),
     })
 
@@ -339,6 +361,7 @@ def pair():
         app_version=str(data.get("app_version", "")),
         pubkey=data.get("device_pubkey"),
         remote_ip=request.remote_addr,
+        fingerprint=data.get("device_fingerprint"),
     )
     if not result.get("ok"):
         code = result.get("code") or "PAIR_FAILED"
@@ -361,6 +384,17 @@ def pair():
     })
 
 
+@bp.get("/transport")
+def transport_info():
+    """Dica de transporte atual — o app usa para renovar o ticket Iroh sem reparear."""
+    return jsonify({
+        "pc_name": socket.gethostname(),
+        "direct": _endpoint_urls(request.host),
+        "iroh": _iroh_hint(),
+        "version": VERSION,
+    })
+
+
 def _endpoint_urls(host: str) -> List[str]:
     """Endereços que o app deve usar, na ordem de preferência.
 
@@ -373,9 +407,11 @@ def _endpoint_urls(host: str) -> List[str]:
     if host and not _is_loopback(host_ip):
         urls.append(f"http://{host}")
     port = host.split(":")[-1] if host and ":" in host else "5055"
-    for ip in (_lan_ip(), _tailnet_ip()):
-        if not ip:
-            continue
+    candidates = list(_all_lan_ips())
+    tailnet = _tailnet_ip()
+    if tailnet and tailnet not in candidates:
+        candidates.append(tailnet)
+    for ip in candidates:
         candidate = f"http://{ip}:{port}"
         if candidate not in urls:
             urls.append(candidate)
@@ -403,8 +439,87 @@ def _iroh_hint() -> Optional[Dict[str, Any]]:
     try:
         with open(path) as handle:
             data = json.load(handle)
-        return {"endpoint_id": data.get("endpoint_id"), "ticket": data.get("ticket"), "alpn": "cyberbot/1"}
+        return {
+            "endpoint_id": data.get("endpoint_id"),
+            "ticket": data.get("ticket"),
+            "alpn": "cyberbot/1",
+            "relay_url": data.get("relay_url"),
+            "online": bool(data.get("relay_url")),
+            "updated_at": data.get("updated_at"),
+        }
     except Exception:
+        return None
+
+
+PAIR_URI = "cyberbot://pair"
+PAIR_PAYLOAD_VERSION = 1
+
+
+def _gateway_endpoints() -> List[str]:
+    """Endereços do gateway LAN (porta real de escuta) — o desktop chama em loopback,
+    então request.host seria 127.0.0.1:5000 e não serve para o celular."""
+    gateway = _gateway_info()
+    port = int(gateway.get("port") or int(os.environ.get("MOBILE_PORT", "5055")))
+    urls: List[str] = []
+    ips = list(_all_lan_ips())
+    tailnet = _tailnet_ip()
+    if tailnet and tailnet not in ips:
+        ips.append(tailnet)
+    for ip in ips:
+        candidate = f"http://{ip}:{port}"
+        if candidate not in urls:
+            urls.append(candidate)
+    for host in gateway.get("hosts") or []:
+        host = str(host)
+        if not host or host.startswith("0.0.0.0") or _is_loopback(host.split(":")[0]):
+            continue
+        candidate = f"http://{host}" if ":" in host else f"http://{host}:{port}"
+        if candidate not in urls:
+            urls.append(candidate)
+    return urls
+
+
+def _pair_payload(code: str) -> str:
+    """URI do QR Code lido pelo app: código + endereços LAN + ticket Iroh.
+
+    O ticket Iroh é o que faz o app funcionar fora de casa (4G), então ele vai
+    junto do código para o app não depender de digitação manual.
+    """
+    from urllib.parse import urlencode
+    params: List[Tuple[str, str]] = [
+        ("v", str(PAIR_PAYLOAD_VERSION)),
+        ("c", str(code)),
+        ("n", socket.gethostname()),
+    ]
+    iroh = _iroh_hint() or {}
+    if iroh.get("ticket"):
+        params.append(("t", str(iroh["ticket"])))
+    if iroh.get("endpoint_id"):
+        params.append(("i", str(iroh["endpoint_id"])))
+    for url in _gateway_endpoints()[:3]:
+        params.append(("d", str(url)))
+    return f"{PAIR_URI}?{urlencode(params)}"
+
+
+def _qr_svg(data: str, box_size: int = 10, border: int = 2) -> Optional[str]:
+    try:
+        pilibs = os.path.join(BASE_DIR, "pylibs")
+        if os.path.isdir(pilibs) and pilibs not in sys.path:
+            sys.path.insert(0, pilibs)
+        import qrcode
+        import qrcode.image.svg
+    except Exception as exc:
+        print(f"[mobile] qrcode indisponível ({exc}): pip3 install --target ./pylibs qrcode",
+              file=sys.stderr)
+        return None
+    try:
+        image = qrcode.make(data, image_factory=qrcode.image.svg.SvgPathImage,
+                            box_size=box_size, border=border)
+        buffer = io.BytesIO()
+        image.save(buffer)
+        return buffer.getvalue().decode("utf-8")
+    except Exception as exc:
+        print(f"[mobile] falha ao gerar QR Code: {exc}", file=sys.stderr)
         return None
 
 
@@ -470,9 +585,20 @@ def chat():
             elif role in ("você", "voce", "user"):
                 history.append({"role": "user", "content": content})
     history.append({"role": "user", "content": message})
+    try:
+        log.log_access({"type": "mobile", "event": "chat", "conversation_id": cid,
+                        "history_len": len(history), "model": model,
+                        "device_id": getattr(g, "device", {}).get("id") if hasattr(g, "device") else None})
+    except Exception:
+        pass
     started = time.time()
     try:
-        response = _chat(history[-20:], model)
+        response = httpx.post(f"{OLLAMA_URL}/api/chat", json={
+            "model": model,
+            "messages": _history_payload(history),
+            "options": ollama_utils.get_chat_options(model),
+            "stream": False,
+        }, timeout=CHAT_TIMEOUT)
         response.raise_for_status()
         reply = response.json().get("message", {}).get("content", "")
     except Exception as exc:
@@ -871,6 +997,20 @@ def _store_in_drive(name: str, data: bytes, mime: str, folder_name: Optional[str
     return fid
 
 
+def _history_payload(history: List[Dict[str, Any]], window: int = 20, max_images: int = 2) -> List[Dict[str, Any]]:
+    """Monta o payload para o Ollama mantendo as imagens só nas N mensagens mais recentes."""
+    recent = history[-window:]
+    image_indexes = [i for i, item in enumerate(recent) if item.get("images")]
+    keep = set(image_indexes[-max_images:]) if max_images > 0 else set()
+    payload: List[Dict[str, Any]] = []
+    for index, item in enumerate(recent):
+        entry: Dict[str, Any] = {"role": item.get("role", "user"), "content": item.get("content", "")}
+        if index in keep and item.get("images"):
+            entry["images"] = item["images"]
+        payload.append(entry)
+    return payload
+
+
 def _ollama_vision(prompt: str, images_b64: List[str], model: str) -> str:
     response = httpx.post(f"{OLLAMA_URL}/api/chat", json={
         "model": model,
@@ -928,11 +1068,23 @@ def media_image():
     if not _ollama_running():
         return _error("UPSTREAM_TIMEOUT", "Ollama não está rodando.", 504)
     model = _resolve_model(request.form.get("model"))
+    cid = str(request.form.get("conversation_id") or "").strip() or f"media_{secrets.token_hex(4)}"
+    history = _conversation(cid)
+    history.append({"role": "user", "content": caption, "images": [base64.b64encode(data).decode()]})
     try:
-        reply = _ollama_vision(caption, [base64.b64encode(data).decode()], model)
+        response = httpx.post(f"{OLLAMA_URL}/api/chat", json={
+            "model": model,
+            "messages": _history_payload(history),
+            "options": ollama_utils.get_chat_options(model),
+            "stream": False,
+        }, timeout=CHAT_TIMEOUT)
+        response.raise_for_status()
+        reply = response.json().get("message", {}).get("content", "")
     except Exception as exc:
+        history.pop()
         return _error("UPSTREAM_TIMEOUT", f"Falha ao analisar a imagem: {exc}", 504)
-    return jsonify({"reply": reply, "model": model})
+    history.append({"role": "assistant", "content": reply})
+    return jsonify({"reply": reply, "model": model, "conversation_id": cid})
 
 
 @bp.post("/media/video")
@@ -1029,11 +1181,23 @@ def media_audio():
 
     caption = str(request.form.get("caption") or "Transcreva e responda este áudio")
     model = _resolve_model(request.form.get("model"))
+    cid = str(request.form.get("conversation_id") or "").strip() or f"media_{secrets.token_hex(4)}"
+    history = _conversation(cid)
+    history.append({"role": "user", "content": caption, "images": [wav_b64]})
     started = time.time()
     try:
-        reply = _ollama_vision(caption, [wav_b64], model)
+        response = httpx.post(f"{OLLAMA_URL}/api/chat", json={
+            "model": model,
+            "messages": _history_payload(history),
+            "options": ollama_utils.get_chat_options(model),
+            "stream": False,
+        }, timeout=CHAT_TIMEOUT)
+        response.raise_for_status()
+        reply = response.json().get("message", {}).get("content", "")
     except Exception as exc:
+        history.pop()
         return _error("UPSTREAM_TIMEOUT", f"Falha ao processar o áudio: {exc}", 504)
+    history.append({"role": "assistant", "content": reply})
 
     audio = _tts_mp3(reply)
     payload: Dict[str, Any] = {
@@ -1042,6 +1206,7 @@ def media_audio():
         "elapsed_ms": int((time.time() - started) * 1000),
         "audio_mime": "audio/mpeg" if audio else None,
         "audio_b64": base64.b64encode(audio).decode() if audio else None,
+        "conversation_id": cid,
     }
     return jsonify(payload)
 
@@ -1360,9 +1525,12 @@ def admin_status():
     gateway = _gateway_info()
     port = gateway.get("port") or 5055
     endpoints: List[str] = []
-    for ip in (_lan_ip(), _tailnet_ip()):
-        if ip:
-            endpoints.append(f"http://{ip}:{port}")
+    all_ips = list(_all_lan_ips())
+    tailnet = _tailnet_ip()
+    if tailnet and tailnet not in all_ips:
+        all_ips.append(tailnet)
+    for ip in all_ips:
+        endpoints.append(f"http://{ip}:{port}")
     for host in gateway.get("hosts") or []:
         host = str(host)
         if not host or host.startswith("0.0.0.0") or _is_loopback(host.split(":")[0]):
@@ -1378,6 +1546,25 @@ def admin_status():
         "iroh": _iroh_hint(),
         "devices_count": len([d for d in devices if not d.get("revoked")]),
         "devices": devices,
+    })
+
+
+@bp.get("/admin/pair/qr")
+def admin_pair_qr():
+    """Gera código de pareamento + QR Code (payload completo) para o app escanear."""
+    ttl = request.args.get("ttl", type=int) or auth.PAIR_CODE_TTL
+    result = auth.generate_pair_code(ttl)
+    if not result.get("ok"):
+        return _error(result.get("code", "PAIR_LOCKED"), "Pareamento bloqueado.", 423, result.get("retry_after"))
+    payload = _pair_payload(result["code"])
+    return jsonify({
+        "code": result["code"],
+        "expires_in": result["expires_in"],
+        "payload": payload,
+        "qr_svg": _qr_svg(payload),
+        "endpoints": _gateway_endpoints(),
+        "pc_name": socket.gethostname(),
+        "iroh": _iroh_hint(),
     })
 
 

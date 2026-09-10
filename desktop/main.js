@@ -29,9 +29,17 @@ function saveWindowState() {
 function startServer() {
   try { spawn.sync("fuser", ["-k", "5000/tcp"], { stdio: "ignore" }); } catch (_) {}
   try { spawn.sync("rm", ["-f", "__pycache__/*.pyc"], { cwd: path.join(__dirname, ".."), shell: true }); } catch (_) {}
-  const serverPath = app.isPackaged
+  serverPath = app.isPackaged
     ? path.join(process.resourcesPath, "backend", "server.py")
     : path.join(__dirname, "..", "server.py");
+
+  // O fuser às vezes não enxerga o servidor de uma sessão anterior; sem isso o
+  // server.py antigo continua segurando a porta 5000 e o novo código não sobe.
+  try {
+    spawn.sync("pkill", ["-f", escaparRegex(serverPath)], { stdio: "ignore" });
+    spawn.sync("pkill", ["-f", escaparRegex(path.join(path.dirname(serverPath), "bot.py"))], { stdio: "ignore" });
+    spawn.sync("sleep", ["1"], { stdio: "ignore" });
+  } catch (_) {}
 
   serverProcess = spawn("python3", [serverPath], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -63,6 +71,29 @@ const P2P_SCRIPTS = {
   gateway: { file: "mobile_gateway.py", args: ["--port", "5055"], pattern: "mobile_gateway.py" },
   iroh: { file: "iroh_node.py", args: ["--serve"], pattern: "iroh_node.py" },
 };
+
+let serverPath = null;
+
+function escaparRegex(valor) {
+  return String(valor).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matarPorPadrao(padrao) {
+  try { spawn.sync("pkill", ["-9", "-f", padrao], { stdio: "ignore" }); } catch (_) {}
+}
+
+/**
+ * Mata TUDO que o desktop subiu: servidor, bot, gateway LAN, nó Iroh e ollama.
+ * Roda no "Sair". Sem isso sobram processos órfãos segurando a porta 5000/5055
+ * e o próximo servidor sobe com código velho.
+ */
+function encerrarBackends() {
+  if (serverPath) matarPorPadrao(escaparRegex(serverPath));
+  matarPorPadrao("python3.*server\\.py");
+  matarPorPadrao("python3.*bot\\.py");
+  for (const spec of Object.values(P2P_SCRIPTS)) matarPorPadrao(spec.pattern);
+  matarPorPadrao("ollama");
+}
 
 function p2pRunning(kind) {
   const spec = P2P_SCRIPTS[kind];
@@ -215,11 +246,23 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
-  try { spawn.sync("pkill", ["-9", "-f", "python3.*bot.py"], { stdio: "ignore" }); } catch (_) {}
-  try { spawn.sync("pkill", ["-9", "ollama"], { stdio: "ignore" }); } catch (_) {}
+  encerrarBackends();
 });
+
+app.on("will-quit", () => {
+  encerrarBackends();
+});
+
+// Fechar pelo terminal (Ctrl+C / kill) também derruba tudo que o app subiu.
+for (const sinal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(sinal, () => {
+    encerrarBackends();
+    app.quit();
+  });
+}
 
 app.on("window-all-closed", () => {
   if (serverProcess) serverProcess.kill();
+  encerrarBackends();
   app.quit();
 });

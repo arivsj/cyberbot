@@ -91,6 +91,12 @@ def _start_mdns(port: int):
                     zc.update_service(_build(current))
                     state["addresses"] = current
                     print(f"[mdns] endereços atualizados: {_lan_ips()}")
+                    try:
+                        with open(os.path.join(mobile_bridge.BASE_DIR, "state", "gateway.json"), "w") as handle:
+                            json.dump({"port": port, "hosts": _lan_ips(),
+                                       "started_at": time.strftime("%Y-%m-%dT%H:%M:%S")}, handle, indent=2)
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
