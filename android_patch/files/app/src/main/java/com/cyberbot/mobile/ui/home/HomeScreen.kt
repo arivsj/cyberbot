@@ -2,6 +2,9 @@ package com.cyberbot.mobile.ui.home
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CleaningServices
@@ -30,8 +33,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,10 +49,22 @@ import com.cyberbot.mobile.ui.common.PressableCyberCard
 import com.cyberbot.mobile.ui.common.ScreenScaffold
 import com.cyberbot.mobile.ui.nav.Routes
 import kotlin.math.ceil
+import kotlinx.coroutines.delay
 
 private const val COLUNAS = 3
 private val ESPACO = 12.dp
 private val ALTURA_MINIMA = 104.dp
+
+/** De que lado cada cartao entra na formacao da Home. */
+private fun direcaoDeEntrada(indice: Int): Offset {
+    val coluna = indice % COLUNAS
+    val linha = indice / COLUNAS
+    return when (coluna) {
+        0 -> Offset(-1f, 0f)
+        COLUNAS - 1 -> Offset(1f, 0f)
+        else -> if (linha % 2 == 0) Offset(0f, -1f) else Offset(0f, 1f)
+    }
+}
 
 private data class HomeModule(
     val route: String,
@@ -96,10 +118,33 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(ESPACO),
                 verticalArrangement = Arrangement.spacedBy(ESPACO),
             ) {
-                items(homeModules) { module ->
+                itemsIndexed(homeModules) { indice, module ->
+                    // Entrada em cascata: cada cartao vem de um lado diferente e se
+                    // acomoda no lugar, formando a grade depois do desbloqueio.
+                    var chegou by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) {
+                        delay(indice * 42L)
+                        chegou = true
+                    }
+                    val entrada by animateFloatAsState(
+                        targetValue = if (chegou) 0f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = 0.62f,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                        label = "entradaCartao",
+                    )
+                    val direcao = direcaoDeEntrada(indice)
+
                     PressableCyberCard(
                         onClick = { onOpenDestination(module.route) },
-                        modifier = Modifier.height(alturaCelula),
+                        modifier = Modifier
+                            .height(alturaCelula)
+                            .graphicsLayer {
+                                translationX = direcao.x * entrada * 320f
+                                translationY = direcao.y * entrada * 320f
+                                alpha = (1f - entrada).coerceIn(0f, 1f)
+                            },
                         contentPadding = PaddingValues(0.dp),
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally,

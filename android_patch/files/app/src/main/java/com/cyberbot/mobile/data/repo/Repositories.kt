@@ -211,6 +211,11 @@ class SecurityRepository @Inject constructor(
 ) {
     suspend fun run() = mobileApi.securityRun()
     suspend fun report() = mobileApi.securityReport()
+
+    suspend fun reportIncident(motivo: String, tentativas: Int, bloqueadoAte: String) =
+        mobileApi.reportIncident(motivo, tentativas, bloqueadoAte)
+
+    suspend fun incidents() = mobileApi.securityIncidents()
 }
 
 @Singleton

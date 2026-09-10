@@ -423,6 +423,56 @@ def security_run():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def _avisar_telegram(texto):
+    """Manda o aviso para todo mundo na whitelist. Sem token, so ignora."""
+    if not BOT_TOKEN:
+        return False
+    enviados = 0
+    for entrada in db.whitelist_list():
+        destino = entrada.get("user_id")
+        if not destino:
+            continue
+        try:
+            r = httpx.post(
+                f"{TELEGRAM_API}{BOT_TOKEN}/sendMessage",
+                json={"chat_id": destino, "text": texto},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                enviados += 1
+        except Exception:
+            continue
+    return enviados > 0
+
+@app.route("/api/security/incident", methods=["POST", "OPTIONS"])
+def security_incident():
+    """Recebe o incidente da tela de bloqueio do app e avisa no Telegram."""
+    if request.method == "OPTIONS":
+        return jsonify({})
+    data = request.get_json(silent=True) or {}
+    motivo = (data.get("motivo") or "").strip() or "Acesso barrado na tela de bloqueio"
+    tentativas = int(data.get("tentativas") or 0)
+    bloqueado_ate = (data.get("bloqueado_ate") or "").strip()
+    dispositivo = (data.get("dispositivo") or request.headers.get("User-Agent", ""))[:80]
+
+    incidente_id = db.save_incident(motivo, tentativas, dispositivo, bloqueado_ate)
+    texto = (
+        "🚨 ACESSO BLOQUEADO — CyberBot Mobile\n"
+        f"Motivo: {motivo}\n"
+        f"Tentativas: {tentativas}\n"
+        f"Bloqueado até: {bloqueado_ate or '—'}\n"
+        f"Dispositivo: {dispositivo or '—'}"
+    )
+    notificado = _avisar_telegram(texto)
+    if notificado:
+        db.marcar_incidente_notificado(incidente_id)
+    print(f"[incidente] #{incidente_id} salvo (telegram={'sim' if notificado else 'nao'})")
+    return jsonify({"status": "ok", "id": incidente_id, "notificado": notificado})
+
+@app.route("/api/security/incidents")
+def security_incidents():
+    return jsonify(db.list_incidents(50))
+
 SEC_CHECKS_LIST = ["connections", "ssh", "integrity", "persistence", "processes", "ports", "firewall", "fail2ban", "sudo", "updates", "services", "users"]
 SEC_LABELS = {"connections": "🌐 Conexões", "ssh": "🔑 SSH", "integrity": "📁 Integridade", "persistence": "⏱ Persistência", "processes": "⚙ Processos", "ports": "🚪 Portas", "firewall": "🔥 Firewall", "fail2ban": "🛡 Fail2ban", "sudo": "👤 Sudo", "updates": "📦 Updates", "services": "⚙ Serviços", "users": "👥 Usuários"}
 

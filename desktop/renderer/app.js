@@ -1117,8 +1117,43 @@ function setSecStatus(text, cls) {
 
 document.getElementById("secRunAll")?.addEventListener("click", runAllSecurity);
 
+/**
+ * Incidentes de acesso barrados na tela de bloqueio do app Android. O celular grava
+ * no PC quando passa dos 30s sem autenticar; aqui so mostramos o que ficou salvo.
+ */
+async function loadIncidents() {
+  const caixa = document.getElementById("secIncidents");
+  const conteudo = document.getElementById("secIncidentsContent");
+  if (!caixa || !conteudo) return;
+  try {
+    const lista = await api.get("/api/security/incidents");
+    if (!Array.isArray(lista) || lista.length === 0) {
+      caixa.classList.add("hidden");
+      return;
+    }
+    caixa.classList.remove("hidden");
+    conteudo.innerHTML = lista.map(i => {
+      const cor = i.notificado ? "#00fff7" : "#ff6b00";
+      return '<div style="border-left:2px solid #ff0044;padding:6px 10px;margin:6px 0;background:#12122a">' +
+        '<div style="display:flex;gap:10px;align-items:center;font-size:12px">' +
+          '<b style="color:#ff0044">#' + i.id + '</b>' +
+          '<span style="color:#6060a0">' + (i.date || "") + '</span>' +
+          '<span style="color:#ff0044">' + (i.tentativas || 0) + 'x</span>' +
+          '<span style="color:' + cor + ';margin-left:auto">telegram: ' + (i.notificado ? "sim" : "não") + '</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#c0c0e0;margin-top:4px">' + (i.motivo || "") + '</div>' +
+        '<div style="font-size:11px;color:#6060a0">bloqueado até ' + (i.bloqueado_ate || "—") +
+          ' · ' + (i.dispositivo || "—") + '</div>' +
+      '</div>';
+    }).join("");
+  } catch (e) {
+    console.error("[sec] ERRO incidentes:", e);
+  }
+}
+
 async function loadSecurity() {
   setSecStatus("⏳ Carregando...", "sending");
+  loadIncidents();
   try {
     const all = await api.get("/api/security/run");
     console.log("[sec] run_all:", all);

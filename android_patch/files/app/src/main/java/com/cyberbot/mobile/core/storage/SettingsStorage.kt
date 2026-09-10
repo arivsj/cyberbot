@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -35,7 +36,15 @@ class SettingsStorage @Inject constructor(
         val irohEndpointId = stringPreferencesKey("iroh_endpoint_id")
         val irohTicket = stringPreferencesKey("iroh_ticket")
         val directCandidates = stringSetPreferencesKey("direct_candidates")
+        val bloqueioAte = longPreferencesKey("bloqueio_ate")
     }
+
+    /** Instante (epoch ms) ate quando o app fica bloqueado por tentativas erradas. */
+    val bloqueioAte: Flow<Long> = context.settingsDataStore.data
+        .catch { erro ->
+            if (erro is IOException) emit(emptyPreferences()) else throw erro
+        }
+        .map { preferencias -> preferencias[Keys.bloqueioAte] ?: 0L }
 
     val session: Flow<SessionSnapshot> =
         context.settingsDataStore.data
@@ -77,6 +86,18 @@ class SettingsStorage @Inject constructor(
             preferences[Keys.directBaseUrl] = directBaseUrl
             preferences[Keys.relayUrl] = relayUrl.orEmpty()
             preferences[Keys.pinSet] = pinSet.toString()
+        }
+    }
+
+    suspend fun registrarBloqueioAte(ate: Long) {
+        context.settingsDataStore.edit { preferencias ->
+            preferencias[Keys.bloqueioAte] = ate
+        }
+    }
+
+    suspend fun limparBloqueio() {
+        context.settingsDataStore.edit { preferencias ->
+            preferencias.remove(Keys.bloqueioAte)
         }
     }
 

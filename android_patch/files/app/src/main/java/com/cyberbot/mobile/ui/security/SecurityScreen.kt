@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.cyberbot.mobile.ui.common.CyberButton
 import com.cyberbot.mobile.ui.common.CyberTextButton
+import com.cyberbot.mobile.core.model.SecurityIncident
 import com.cyberbot.mobile.core.model.SecurityResult
 import com.cyberbot.mobile.core.net.ApiResult
 import com.cyberbot.mobile.data.repo.SecurityRepository
@@ -20,6 +21,9 @@ import com.cyberbot.mobile.ui.common.CyberCard
 import com.cyberbot.mobile.ui.common.ErrorPane
 import com.cyberbot.mobile.ui.common.ScreenScaffold
 import com.cyberbot.mobile.ui.common.SectionLabel
+import com.cyberbot.mobile.ui.common.StatRow
+import com.cyberbot.mobile.ui.theme.Danger
+import com.cyberbot.mobile.ui.theme.TextDim
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +34,7 @@ import kotlinx.coroutines.launch
 
 data class SecurityUiState(
     val checks: Map<String, SecurityResult> = emptyMap(),
+    val incidents: List<SecurityIncident> = emptyList(),
     val analysis: String? = null,
     val isLoading: Boolean = false,
     val isAnalysing: Boolean = false,
@@ -44,7 +49,20 @@ class SecurityViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SecurityUiState())
     val uiState: StateFlow<SecurityUiState> = _uiState.asStateFlow()
 
-    init { run() }
+    init {
+        run()
+        carregarIncidentes()
+    }
+
+    /** Incidentes de acesso barrados na tela de bloqueio, gravados pelo PC. */
+    fun carregarIncidentes() {
+        viewModelScope.launch {
+            when (val result = securityRepository.incidents()) {
+                is ApiResult.Success -> _uiState.update { it.copy(incidents = result.body) }
+                is ApiResult.HttpError, is ApiResult.NetworkError -> Unit
+            }
+        }
+    }
 
     fun run() {
         viewModelScope.launch {
@@ -101,6 +119,30 @@ fun SecurityScreen(state: SecurityUiState, onRun: () -> Unit, onAnalyse: () -> U
                     Text("Checagens: ${state.checks.size}   Alertas: $alerts")
                     CyberButton(onClick = onAnalyse, enabled = !state.isAnalysing, modifier = Modifier.fillMaxWidth()) {
                         Text(if (state.isAnalysing) "Analisando com IA..." else "Relatorio com IA")
+                    }
+                }
+            }
+            if (state.incidents.isNotEmpty()) {
+                item {
+                    CyberCard(modifier = Modifier.fillMaxWidth()) {
+                        SectionLabel("Incidentes de acesso")
+                        state.incidents.take(6).forEach { incidente ->
+                            StatRow(
+                                rotulo = ("#" + incidente.id + "  " + incidente.date).trim(),
+                                valor = incidente.tentativas.toString() + "x",
+                                corValor = Danger,
+                            )
+                            Text(
+                                incidente.motivo,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextDim,
+                            )
+                            Text(
+                                "ate " + incidente.bloqueado_ate + "  |  " + incidente.dispositivo,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextDim,
+                            )
+                        }
                     }
                 }
             }

@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
+    implementation(libs.androidx.biometric)
     kapt(libs.hilt.compiler)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)

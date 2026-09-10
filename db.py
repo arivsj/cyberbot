@@ -85,6 +85,18 @@ def init():
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS security_incidents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            motivo TEXT NOT NULL,
+            tentativas INTEGER DEFAULT 0,
+            dispositivo TEXT DEFAULT '',
+            bloqueado_ate TEXT DEFAULT '',
+            notificado INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
     conn.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('model', 'gemma4')"
     )
@@ -402,6 +414,35 @@ def set_setting(key, value):
     )
     conn.commit()
     conn.close()
+
+# ─── Incidentes de acesso ───────────────────────────────
+
+def save_incident(motivo, tentativas=0, dispositivo="", bloqueado_ate=""):
+    """Registra uma tentativa de acesso barrada na tela de bloqueio do app."""
+    conn = get_conn()
+    cur = conn.execute(
+        "INSERT INTO security_incidents (date, motivo, tentativas, dispositivo, bloqueado_ate)"
+        " VALUES (date('now', 'localtime'), ?, ?, ?, ?)",
+        (motivo, int(tentativas or 0), dispositivo, bloqueado_ate),
+    )
+    conn.commit()
+    incidente_id = cur.lastrowid
+    conn.close()
+    return incidente_id
+
+def marcar_incidente_notificado(incidente_id):
+    conn = get_conn()
+    conn.execute("UPDATE security_incidents SET notificado = 1 WHERE id = ?", (incidente_id,))
+    conn.commit()
+    conn.close()
+
+def list_incidents(limit=50):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM security_incidents ORDER BY id DESC LIMIT ?", (int(limit),)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 # ─── Reports ────────────────────────────────────────────
 
