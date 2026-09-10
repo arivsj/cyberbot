@@ -1,5 +1,7 @@
 import os
 import hashlib
+import shlex
+import shutil
 import subprocess
 import json
 import db
@@ -32,7 +34,9 @@ CHECKS_META = {
     },
     "integrity": {
         "cmd": "md5sum /etc/passwd /etc/sudoers /bin/ls /bin/ps",
-        "desc": "Integridade de arquivos críticos — compara hashes MD5 atuais com o baseline salvo.",
+        "desc": "Integridade de arquivos críticos — compara hashes MD5 atuais com o baseline salvo. "
+                "Se o hash mudou, confere antes com o que o pacote do sistema (dpkg) instalou: "
+                "atualização legítima renova o baseline em vez de virar alerta.",
         "risk": "Arquivo de sistema modificado (rootkit ou backdoor)",
     },
     "persistence": {
@@ -153,6 +157,62 @@ def init_baseline():
     if changed:
         _save_baseline(baseline)
 
+def _pacotes_do_arquivo(path):
+    """Pacotes do dpkg que instalam este caminho (considera /bin -> /usr/bin)."""
+    if not shutil.which("dpkg"):
+        return []
+    alvos = [path]
+    real = os.path.realpath(path)
+    if real != path:
+        alvos.append(real)
+    pacotes = []
+    for alvo in alvos:
+        out, _, rc = _run(f"dpkg -S {shlex.quote(alvo)} 2>/dev/null")
+        if rc != 0 or not out:
+            continue
+        if ":" in out:
+            out = out.split(":", 1)[0]
+        for nome in out.split(","):
+            nome = nome.strip()
+            if nome and nome not in pacotes:
+                pacotes.append(nome)
+    return pacotes
+
+
+def _hash_do_pacote(path):
+    """(pacote, md5) que o dpkg registrou para o arquivo — None quando não é de pacote.
+
+    O pacote pode ter sido construído antes do /usr mesclado, então o mesmo arquivo
+    aparece como "bin/ls" ou "usr/bin/ls" — os dois caminhos valem.
+    """
+    candidatos = {path.lstrip("/"), os.path.realpath(path).lstrip("/")}
+    for pacote in _pacotes_do_arquivo(path):
+        try:
+            with open(f"/var/lib/dpkg/info/{pacote}.md5sums") as handle:
+                for linha in handle:
+                    partes = linha.split()
+                    if len(partes) < 2:
+                        continue
+                    registrado = partes[1].lstrip("*").lstrip("./")
+                    if registrado in candidatos:
+                        return pacote, partes[0]
+        except Exception:
+            continue
+    return None, None
+
+
+def _contas_uid_zero():
+    try:
+        with open("/etc/passwd") as handle:
+            return [
+                linha.split(":")[0]
+                for linha in handle
+                if linha.count(":") >= 3 and linha.split(":")[2] == "0"
+            ]
+    except Exception:
+        return []
+
+
 def check_integrity():
     baseline = _load_baseline()
     alerts = []
@@ -161,18 +221,53 @@ def check_integrity():
         current = _md5(path)
         stored = baseline.get(path)
         if current is None:
-            results.append({"file": path, "status": "erro", "detail": "não encontrado"})
+            if os.path.exists(path) and not os.access(path, os.R_OK):
+                detail = "sem permissão de leitura (rode como root para conferir)"
+                status = "sem_permissao"
+            else:
+                detail = "não encontrado"
+                status = "erro"
+            results.append({"file": path, "status": status, "detail": detail})
             continue
         if stored is None:
             baseline[path] = current
             _save_baseline(baseline)
             results.append({"file": path, "status": "ok", "detail": "baseline criado"})
             continue
-        if current != stored:
-            alerts.append(f"{path} modificado!")
-            results.append({"file": path, "status": "modificado", "detail": f"hash diff"})
-        else:
+        if current == stored:
             results.append({"file": path, "status": "ok", "detail": "ok"})
+            continue
+
+        # Hash mudou: antes de acusar, confere com o que o pacote do sistema instalou.
+        # Atualização de sistema (apt/dpkg) troca o binário legitimamente — isso não é rootkit.
+        pacote, hash_pacote = _hash_do_pacote(path)
+        if hash_pacote and hash_pacote == current:
+            baseline[path] = current
+            _save_baseline(baseline)
+            results.append({
+                "file": path,
+                "status": "ok",
+                "detail": f"ok — atualizado pelo pacote {pacote} (baseline renovado)",
+            })
+            continue
+
+        detail = "hash diff"
+        if pacote:
+            detail += f" — pacote {pacote} esperava {str(hash_pacote)[:10]}…"
+        else:
+            detail += " — arquivo não pertence a nenhum pacote"
+
+        if path == "/etc/passwd":
+            contas = _contas_uid_zero()
+            detalhe_contas = ", ".join(contas) if contas else "nenhuma"
+            detail += f" | contas uid 0: {detalhe_contas}"
+            extras = [c for c in contas if c != "root"]
+            if extras:
+                alerts.append(f"/etc/passwd com conta uid 0 além do root: {', '.join(extras)}")
+
+        alerts.append(f"{path} modificado!")
+        results.append({"file": path, "status": "modificado", "detail": detail})
+
     return {"status": "alerta" if alerts else "ok", "results": results, "alerts": alerts, "meta": CHECKS_META["integrity"]}
 
 def check_persistence():
