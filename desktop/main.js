@@ -144,6 +144,56 @@ ipcMain.handle("show-item-in-folder", (_event, filePath) => {
   shell.showItemInFolder(filePath);
 });
 
+function janelaDoEvento(event) {
+  return BrowserWindow.fromWebContents(event.sender);
+}
+
+ipcMain.handle("win-minimize", (event) => {
+  const win = janelaDoEvento(event);
+  if (win) win.minimize();
+});
+
+ipcMain.handle("win-toggle-maximize", (event) => {
+  const win = janelaDoEvento(event);
+  if (!win) return false;
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+  return win.isMaximized();
+});
+
+ipcMain.handle("win-is-maximized", (event) => {
+  const win = janelaDoEvento(event);
+  return win ? win.isMaximized() : false;
+});
+
+ipcMain.handle("win-close", (event) => {
+  const win = janelaDoEvento(event);
+  if (win) win.close();
+});
+
+ipcMain.handle("menu-action", (event, action) => {
+  const win = janelaDoEvento(event);
+  switch (action) {
+    case "clear-cache":
+      clearCache();
+      return true;
+    case "reload":
+      if (win) win.reload();
+      return true;
+    case "devtools":
+      if (win) win.webContents.toggleDevTools();
+      return true;
+    case "fullscreen":
+      if (win) win.setFullScreen(!win.isFullScreen());
+      return true;
+    case "quit":
+      app.quit();
+      return true;
+    default:
+      return false;
+  }
+});
+
 ipcMain.handle("read-file", (_event, filePath) => {
   try {
     const data = fs.readFileSync(filePath);
@@ -209,6 +259,7 @@ function createWindow() {
     y: state.y,
     minWidth: 760,
     minHeight: 500,
+    frame: false,
     title: "CyberBot",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -230,8 +281,14 @@ function createWindow() {
 
   mainWindow.on("resize", saveWindowState);
   mainWindow.on("move", saveWindowState);
-  mainWindow.on("maximize", saveWindowState);
-  mainWindow.on("unmaximize", saveWindowState);
+  mainWindow.on("maximize", () => {
+    saveWindowState();
+    mainWindow.webContents.send("win-maximized-changed", true);
+  });
+  mainWindow.on("unmaximize", () => {
+    saveWindowState();
+    mainWindow.webContents.send("win-maximized-changed", false);
+  });
   mainWindow.on("close", saveWindowState);
 }
 

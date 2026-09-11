@@ -1923,3 +1923,64 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSysmon();
   updateSecBadge();
 });
+
+// ─── Controles da janela (barra de título própria) ─────
+
+function atualizarIconeMaximizar(maximizada) {
+  const btn = document.getElementById("tbMax");
+  if (!btn) return;
+  btn.textContent = maximizada ? "\u2750" : "\u25A1";
+  btn.title = maximizada ? "Restaurar" : "Maximizar";
+}
+
+document.getElementById("tbMin")?.addEventListener("click", () => api.winMinimize());
+document.getElementById("tbMax")?.addEventListener("click", () => api.winToggleMaximize());
+document.getElementById("tbClose")?.addEventListener("click", () => api.winClose());
+
+document.getElementById("appTitlebar")?.addEventListener("dblclick", (event) => {
+  if (event.target.closest(".tb-buttons") || event.target.closest(".tb-menus")) return;
+  api.winToggleMaximize();
+});
+
+function fecharMenus() {
+  document.querySelectorAll(".tb-dropdown").forEach((d) => d.classList.add("hidden"));
+  document.querySelectorAll(".tb-menu").forEach((b) => b.classList.remove("open"));
+}
+
+function alternarMenu(botao, dropdown) {
+  const jaAberto = !dropdown.classList.contains("hidden");
+  fecharMenus();
+  if (!jaAberto) {
+    dropdown.classList.remove("hidden");
+    botao.classList.add("open");
+  }
+}
+
+document.getElementById("tbMenuCyber")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  alternarMenu(event.currentTarget, document.getElementById("tbDropCyber"));
+});
+
+document.getElementById("tbMenuExibir")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  alternarMenu(event.currentTarget, document.getElementById("tbDropExibir"));
+});
+
+document.querySelectorAll("#appTitlebar .tb-item").forEach((item) => {
+  item.addEventListener("click", () => {
+    const acao = item.dataset.action;
+    fecharMenus();
+    api.menuAction(acao);
+  });
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest("#appTitlebar")) fecharMenus();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") fecharMenus();
+});
+
+api.onWindowMaximized?.((maximizada) => atualizarIconeMaximizar(maximizada));
+api.winIsMaximized?.().then(atualizarIconeMaximizar).catch(() => {});

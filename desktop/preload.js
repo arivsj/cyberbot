@@ -32,4 +32,22 @@ contextBridge.exposeInMainWorld("api", {
   readFile(filePath) {
     return ipcRenderer.invoke("read-file", filePath);
   },
+  winMinimize() {
+    return ipcRenderer.invoke("win-minimize");
+  },
+  winToggleMaximize() {
+    return ipcRenderer.invoke("win-toggle-maximize");
+  },
+  winIsMaximized() {
+    return ipcRenderer.invoke("win-is-maximized");
+  },
+  winClose() {
+    return ipcRenderer.invoke("win-close");
+  },
+  menuAction(action) {
+    return ipcRenderer.invoke("menu-action", action);
+  },
+  onWindowMaximized(cb) {
+    ipcRenderer.on("win-maximized-changed", (_event, maximizada) => cb(maximizada));
+  },
 });

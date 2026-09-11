@@ -8,6 +8,33 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="appTitlebar">
+    <div class="tb-menus">
+      <div class="tb-menu-wrap">
+        <button class="tb-menu" id="tbMenuCyber">CyberBot</button>
+        <div class="tb-dropdown hidden" id="tbDropCyber">
+          <button class="tb-item" data-action="clear-cache">Limpar Cache<span class="tb-key">Ctrl+Shift+L</span></button>
+          <div class="tb-sep"></div>
+          <button class="tb-item" data-action="quit">Sair</button>
+        </div>
+      </div>
+      <div class="tb-menu-wrap">
+        <button class="tb-menu" id="tbMenuExibir">Exibir</button>
+        <div class="tb-dropdown hidden" id="tbDropExibir">
+          <button class="tb-item" data-action="reload">Recarregar<span class="tb-key">Ctrl+R</span></button>
+          <button class="tb-item" data-action="devtools">DevTools<span class="tb-key">F12</span></button>
+          <div class="tb-sep"></div>
+          <button class="tb-item" data-action="fullscreen">Tela Cheia<span class="tb-key">F11</span></button>
+        </div>
+      </div>
+    </div>
+    <span class="tb-spacer"></span>
+    <div class="tb-buttons">
+      <button class="tb-btn" id="tbMin" title="Minimizar" aria-label="Minimizar">&#8211;</button>
+      <button class="tb-btn" id="tbMax" title="Maximizar" aria-label="Maximizar">&#9723;</button>
+      <button class="tb-btn tb-close" id="tbClose" title="Fechar" aria-label="Fechar">&#10005;</button>
+    </div>
+  </div>
   <div class="sidebar">
     <div class="logo">
       <span class="neon">CYBER</span>BOT
